@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto"
 	"crypto/rand"
+	_ "crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -16,13 +18,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jacobsa/crypto/siv"
 	"github.com/jawher/mow.cli"
-	"golang.org/x/crypto/nacl/box"
 	"gopkg.in/yaml.v2"
 )
 
 var (
-	keyLoader func(filename string) ([32]byte, [32]byte, error) = keyPair
+	keyLoader func(filename string) (privateKey []byte, err error) = keyPair
 
 	keyRing       KeyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
@@ -110,17 +112,25 @@ func genKey(desc string) {
 		log.Fatal(err)
 	}
 
-	pub, priv, err := box.GenerateKey(rand.Reader)
+	priv := make([]byte, 32)
+	_, err = rand.Read(priv)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	keyRing.AddKey(desc, *pub, *priv)
+	pub := hash(priv)
+
+	keyRing.AddKey(desc, pub, priv)
 
 	err = keyRing.Save()
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func hash(in []byte) []byte {
+	h := crypto.SHA256.New()
+	return h.Sum(nil)
 }
 
 func diff(filename string) {
@@ -147,12 +157,12 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	filter(r, w, filename, decrypt)
 }
 
-func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, pub, priv [32]byte) ([]byte, error)) {
+func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, priv []byte) ([]byte, error)) {
 	in, err := ioutil.ReadAll(r)
 	if err != nil {
 		log.Fatal(err)
 	}
-	pub, priv, err := keyLoader(filename)
+	priv, err := keyLoader(filename)
 	if err != nil {
 		log.Println(err)
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
@@ -161,7 +171,7 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, pub, pri
 		return
 	}
 
-	out, err := f(in, pub, priv)
+	out, err := f(in, priv)
 	if err != nil {
 		log.Println(err)
 		out = in
@@ -171,7 +181,8 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, pub, pri
 	}
 }
 
-func encrypt(b []byte, pub, priv [32]byte) ([]byte, error) {
+func encrypt(b []byte, priv []byte) ([]byte, error) {
+
 	if bytes.HasPrefix(b, prefix) {
 		// File is encrypted, copy it as is
 		return nil, errors.New("already encrypted")
@@ -179,8 +190,10 @@ func encrypt(b []byte, pub, priv [32]byte) ([]byte, error) {
 
 	b = compress(b)
 
-	var nonce [24]byte
-	out := box.Seal(nil, b, &nonce, &pub, &priv)
+	out, err := siv.Encrypt(nil, priv, b, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	var buf []byte
 	buf = append(buf, defaultPrefix...)
@@ -245,7 +258,7 @@ func decode(encoded []byte) ([]byte, error) {
 	return decoded[0:i], nil
 }
 
-func decrypt(enc []byte, pub, priv [32]byte) ([]byte, error) {
+func decrypt(enc []byte, priv []byte) ([]byte, error) {
 
 	if !bytes.Equal(prefix, enc[0:len(prefix)]) {
 		return nil, errors.New("unexpected prefix")
@@ -263,10 +276,9 @@ func decrypt(enc []byte, pub, priv [32]byte) ([]byte, error) {
 		return nil, err
 	}
 
-	var nonce [24]byte
-	decrypted, success := box.Open(nil, b64decoded, &nonce, &pub, &priv)
-	if !success {
-		return nil, errors.New("Open() failed")
+	decrypted, err := siv.Decrypt(priv, b64decoded, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	decrypted = decompress(decrypted)
@@ -274,26 +286,26 @@ func decrypt(enc []byte, pub, priv [32]byte) ([]byte, error) {
 	return decrypted, nil
 }
 
-func keyPair(filename string) ([32]byte, [32]byte, error) {
+func keyPair(filename string) ([]byte, error) {
 	pub, err := findKey(filename)
 	if err != nil {
-		return [32]byte{}, [32]byte{}, err
+		return []byte{}, err
 	}
 
 	err = keyRing.Load()
 	if err != nil {
-		return [32]byte{}, [32]byte{}, err
+		return []byte{}, err
 	}
 
 	priv, err := keyRing.Private(pub)
 	if err != nil {
-		return [32]byte{}, [32]byte{}, err
+		return []byte{}, err
 	}
 
-	return pub, priv, nil
+	return priv, nil
 }
 
-func findKey(filename string) ([32]byte, error) {
+func findKey(filename string) ([]byte, error) {
 	path := filepath.Dir(filename)
 	for {
 		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
@@ -307,33 +319,31 @@ func findKey(filename string) ([32]byte, error) {
 			break
 		}
 	}
-	return [32]byte{}, fmt.Errorf("failed to find key id for file %s", filename)
+	return []byte{}, fmt.Errorf("failed to find key id for file %s", filename)
 }
 
-func readKey(filename string) ([32]byte, error) {
+func readKey(filename string) ([]byte, error) {
 	fp, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return [32]byte{}, err
+		return []byte{}, err
 	}
 
 	b64 := strings.TrimSpace(string(fp))
 	b, err := decode([]byte(b64))
 	if err != nil {
-		return [32]byte{}, err
+		return []byte{}, err
 	}
 	if len(b) != 32 {
-		return [32]byte{}, fmt.Errorf("unexpected key length %d", len(b))
+		return []byte{}, fmt.Errorf("unexpected key length %d", len(b))
 	}
-	var k [32]byte
-	copy(k[:], b)
-	return k, nil
+	return b, nil
 }
 
 type KeyRing interface {
 	Load() error
 	Save() error
-	AddKey(name string, public [32]byte, private [32]byte)
-	Private(public [32]byte) ([32]byte, error)
+	AddKey(name string, public []byte, private []byte)
+	Private(public []byte) ([]byte, error)
 }
 
 type fileKeyRing struct {
@@ -347,7 +357,7 @@ type key struct {
 	Private     string
 }
 
-func (kr *fileKeyRing) AddKey(desc string, public [32]byte, private [32]byte) {
+func (kr *fileKeyRing) AddKey(desc string, public []byte, private []byte) {
 	kr.Keys = append(kr.Keys, key{
 		Description: desc,
 		Public:      string(encode(public[:])),
@@ -356,25 +366,23 @@ func (kr *fileKeyRing) AddKey(desc string, public [32]byte, private [32]byte) {
 
 }
 
-func (kr *fileKeyRing) Private(pub [32]byte) ([32]byte, error) {
+func (kr *fileKeyRing) Private(pub []byte) ([]byte, error) {
 	b64 := string(encode(pub[:]))
 
 	for _, k := range kr.Keys {
 		if k.Public == b64 {
 			dec, err := decode([]byte(k.Private))
 			if err != nil {
-				return [32]byte{}, err
+				return []byte{}, err
 			}
 			if len(dec) != 32 {
-				return [32]byte{}, fmt.Errorf("unexpected length of private key: %d", len(dec))
+				return []byte{}, fmt.Errorf("unexpected length of private key: %d", len(dec))
 			}
-			var priv [32]byte
-			copy(priv[:], dec)
-			return priv, nil
+			return dec, nil
 		}
 	}
 
-	return [32]byte{}, fmt.Errorf("private key not found for public key %s", b64)
+	return []byte{}, fmt.Errorf("private key not found for public key '%s'", b64)
 }
 
 func (kr *fileKeyRing) Load() error {
