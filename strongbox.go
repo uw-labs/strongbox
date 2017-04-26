@@ -3,9 +3,8 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto"
 	"crypto/rand"
-	_ "crypto/sha256"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -118,19 +117,14 @@ func genKey(desc string) {
 		log.Fatal(err)
 	}
 
-	pub := hash(priv)
+	pub := sha256.Sum256(priv)
 
-	keyRing.AddKey(desc, pub, priv)
+	keyRing.AddKey(desc, pub[:], priv)
 
 	err = keyRing.Save()
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func hash(in []byte) []byte {
-	h := crypto.SHA256.New()
-	return h.Sum(nil)
 }
 
 func diff(filename string) {
