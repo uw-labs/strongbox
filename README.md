@@ -30,3 +30,8 @@ This will add a new key to `$HOME/.strongbox_keyring`
 
 Include a `.strongbox-keyid` file in your repository containing public key you want to use (typically by copying a public key from `$HOME/.strongbox_keyring` )  This can be in the same directory as the protected resource(s) or any parent directory.   When searching for `.strongbox-keyid` for a given resource, strongbox will recurse up the directory structure until it finds the file.  This allows using different keys for different subdirectories within a repository.
 
+
+## Security
+
+Strongbox uses SIV-AES as defined in rfc5297 in order to achieve authenticated deterministic encryption.
+

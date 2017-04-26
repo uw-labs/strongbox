@@ -7,16 +7,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/crypto/nacl/box"
 )
 
 var (
-	pub, priv *[32]byte
+	priv []byte
 )
 
 func TestMain(m *testing.M) {
 	var err error
-	pub, priv, err = box.GenerateKey(rand.Reader)
+	priv = make([]byte, 32)
+	_, err = rand.Read(priv)
 	if err != nil {
 		panic(err)
 	}
@@ -26,8 +26,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func testKeyLoader(string) ([32]byte, [32]byte, error) {
-	return *pub, *priv, nil
+func testKeyLoader(string) ([]byte, error) {
+	return priv, nil
 }
 
 func TestMultipleClean(t *testing.T) {
