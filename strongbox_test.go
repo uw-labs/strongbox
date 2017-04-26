@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 	priv = make([]byte, 32)
 	_, err = rand.Read(priv)
 	if err != nil {
-		panic("err")
+		panic(err)
 	}
 
 	keyLoader = testKeyLoader
