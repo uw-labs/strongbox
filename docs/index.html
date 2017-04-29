@@ -1,0 +1,130 @@
+	<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="author" content="Strongbox">
+		<meta name="description" content="Strongbox - Encryption for git users.">
+		<meta name="generator" content="Hugo 0.21-DEV" />
+		<title></title>
+		<link rel="shortcut icon" href="http://uw-labs.github.io/strongboxfavicon.ico">
+		<link rel="apple-touch-icon" sizes="57x57" href="http://uw-labs.github.io/strongboxapple-icon-57x57.png">
+		<link rel="apple-touch-icon" sizes="60x60" href="http://uw-labs.github.io/strongboxapple-icon-60x60.png">
+		<link rel="apple-touch-icon" sizes="72x72" href="http://uw-labs.github.io/strongboxapple-icon-72x72.png">
+		<link rel="apple-touch-icon" sizes="76x76" href="http://uw-labs.github.io/strongboxapple-icon-76x76.png">
+		<link rel="apple-touch-icon" sizes="114x114" href="http://uw-labs.github.io/strongboxapple-icon-114x114.png">
+		<link rel="apple-touch-icon" sizes="120x120" href="http://uw-labs.github.io/strongboxapple-icon-120x120.png">
+		<link rel="apple-touch-icon" sizes="144x144" href="http://uw-labs.github.io/strongboxapple-icon-144x144.png">
+		<link rel="apple-touch-icon" sizes="152x152" href="http://uw-labs.github.io/strongboxapple-icon-152x152.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="http://uw-labs.github.io/strongboxapple-icon-180x180.png">
+		<link rel="icon" type="image/png" sizes="192x192"  href="http://uw-labs.github.io/strongboxandroid-icon-192x192.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="http://uw-labs.github.io/strongboxfavicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="96x96" href="http://uw-labs.github.io/strongboxfavicon-96x96.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="http://uw-labs.github.io/strongboxfavicon-16x16.png">
+		<link rel="manifest" href="http://uw-labs.github.io/strongboxmanifest.json">
+		<meta name="msapplication-TileColor" content="#ffffff">
+		<meta name="msapplication-TileImage" content="http://uw-labs.github.io/strongboxms-icon-144x144.png">
+		<meta name="theme-color" content="#ffffff">
+		<link rel="stylesheet" href="http://uw-labs.github.io/strongboxcss/style.css">
+		<link rel="stylesheet" href="http://uw-labs.github.io/strongboxcss/highlight.css">
+		
+
+		
+		<link rel="stylesheet" href="http://uw-labs.github.io/strongboxcss/font-awesome.min.css">
+		
+
+		
+	</head>
+
+	<body>
+
+    <section id="wrapper" class="home">
+        <div style="text-align: center;"><img alt="Strongbox" style="width: 50%" src="http://uw-labs.github.io/strongboxlogo.png"/></div>
+
+        
+
+<p>Strongbox makes it easy to encrypt and decrypt files stored in git, with minimal divergence from a typical git workflow.  Once installed, strongbox enables normal use of commands such as <code>git diff</code> etc. and all of the files that should be encrypted in the repository remain decrypted on your working copy.</p>
+
+<p>It supports use of different keys per directory if wanted.  It can cover as many or as few files as you wish based on <a href="https://www.git-scm.com/docs/gitattributes">.gitattributes</a></p>
+
+<h2 id="installation">Installation</h2>
+
+<p>Assuming you have a working <a href="https://golang.org">Go</a> installation, you can install via <code>go get github.com/uw-labs/strongbox</code></p>
+
+<h2 id="usage">Usage</h2>
+
+<p>As a one time action, install the plugin by running <code>strongbox install</code>. This will edit global git config to enable strongbox filter and diff configuration.</p>
+
+<p>In each repository you want to use strongbox, create one or more <code>.gitattributes</code> files containing the file patterns you want to be managed by strongbox:</p>
+
+<p>For example:</p>
+
+<pre><code>secrets-strongbox/* filter=strongbox diff=strongbox
+</code></pre>
+
+<p>Generate a key to use for the encryption, for example:</p>
+
+<pre><code>strongbox gen-key &quot;my key&quot;
+</code></pre>
+
+<p>This will add a new key to <code>$HOME/.strongbox_keyring</code></p>
+
+<p>Include a <code>.strongbox-keyid</code> file in your repository containing public key you want to use (typically by copying a public key from <code>$HOME/.strongbox_keyring</code> )  This can be in the same directory as the protected resource(s) or any parent directory.   When searching for <code>.strongbox-keyid</code> for a given resource, strongbox will recurse up the directory structure until it finds the file.  This allows using different keys for different subdirectories within a repository.</p>
+
+<h2 id="security">Security</h2>
+
+<p>Strongbox uses SIV-AES as defined in rfc5297 in order to achieve authenticated deterministic encryption.</p>
+
+        <footer id="footer">
+    
+        <div id="social">
+
+	
+	
+    <a class="symbol" href="https://github.com/uw-labs">
+        <i class="fa fa-github-square"></i>
+    </a>
+    
+
+
+</div>
+
+    
+    <p class="small">
+    
+       © Copyright 2017 <i class="fa fa-heart" aria-hidden="true"></i> Strongbox
+    
+    </p>
+    <p class="small">
+        Powered by <a href="http://www.gohugo.io/">Hugo</a> Theme By <a href="https://github.com/nodejh/hugo-theme-cactus-plus">nodejh</a>
+    </p>
+</footer>
+
+    </section>
+
+    <script src="http://uw-labs.github.io/strongboxjs/jquery-2.2.4.min.js"></script>
+<script src="http://uw-labs.github.io/strongboxjs/main.js"></script>
+<script src="http://uw-labs.github.io/strongboxjs/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+
+
+
+
+  
+<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'your_google_analytics_code', 'auto');
+ga('send', 'pageview');
+</script>
+
+
+
+
+
+    </body>
+</html>
