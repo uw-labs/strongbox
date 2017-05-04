@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	keyLoader func(filename string) (privateKey []byte, err error) = keyPair
+	keyLoader func(filename string) (key []byte, err error) = key
 
 	keyRing       KeyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
@@ -111,15 +111,15 @@ func genKey(desc string) {
 		log.Fatal(err)
 	}
 
-	priv := make([]byte, 32)
-	_, err = rand.Read(priv)
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	pub := sha256.Sum256(priv)
+	keyId := sha256.Sum256(key)
 
-	keyRing.AddKey(desc, pub[:], priv)
+	keyRing.AddKey(desc, keyId[:], key)
 
 	err = keyRing.Save()
 	if err != nil {
@@ -151,12 +151,12 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	filter(r, w, filename, decrypt)
 }
 
-func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, priv []byte) ([]byte, error)) {
+func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, key []byte) ([]byte, error)) {
 	in, err := ioutil.ReadAll(r)
 	if err != nil {
 		log.Fatal(err)
 	}
-	priv, err := keyLoader(filename)
+	key, err := keyLoader(filename)
 	if err != nil {
 		log.Println(err)
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
@@ -165,7 +165,7 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, priv []b
 		return
 	}
 
-	out, err := f(in, priv)
+	out, err := f(in, key)
 	if err != nil {
 		log.Println(err)
 		out = in
@@ -175,7 +175,7 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, priv []b
 	}
 }
 
-func encrypt(b []byte, priv []byte) ([]byte, error) {
+func encrypt(b []byte, key []byte) ([]byte, error) {
 
 	if bytes.HasPrefix(b, prefix) {
 		// File is encrypted, copy it as is
@@ -184,7 +184,7 @@ func encrypt(b []byte, priv []byte) ([]byte, error) {
 
 	b = compress(b)
 
-	out, err := siv.Encrypt(nil, priv, b, nil)
+	out, err := siv.Encrypt(nil, key, b, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -280,8 +280,8 @@ func decrypt(enc []byte, priv []byte) ([]byte, error) {
 	return decrypted, nil
 }
 
-func keyPair(filename string) ([]byte, error) {
-	pub, err := findKey(filename)
+func key(filename string) ([]byte, error) {
+	keyId, err := findKey(filename)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -291,12 +291,12 @@ func keyPair(filename string) ([]byte, error) {
 		return []byte{}, err
 	}
 
-	priv, err := keyRing.Private(pub)
+	key, err := keyRing.Key(keyId)
 	if err != nil {
 		return []byte{}, err
 	}
 
-	return priv, nil
+	return key, nil
 }
 
 func findKey(filename string) ([]byte, error) {
@@ -336,36 +336,36 @@ func readKey(filename string) ([]byte, error) {
 type KeyRing interface {
 	Load() error
 	Save() error
-	AddKey(name string, public []byte, private []byte)
-	Private(public []byte) ([]byte, error)
+	AddKey(name string, keyId []byte, key []byte)
+	Key(keyId []byte) ([]byte, error)
 }
 
 type fileKeyRing struct {
-	fileName string
-	Keys     []key
+	fileName   string
+	KeyEntries []keyEntry
 }
 
-type key struct {
-	Description string
-	Public      string
-	Private     string
+type keyEntry struct {
+	Description string `json: description`
+	KeyId       string `json: key-id`
+	Key         string `json: key`
 }
 
-func (kr *fileKeyRing) AddKey(desc string, public []byte, private []byte) {
-	kr.Keys = append(kr.Keys, key{
+func (kr *fileKeyRing) AddKey(desc string, keyId []byte, key []byte) {
+	kr.KeyEntries = append(kr.KeyEntries, keyEntry{
 		Description: desc,
-		Public:      string(encode(public[:])),
-		Private:     string(encode(private[:])),
+		KeyId:       string(encode(keyId[:])),
+		Key:         string(encode(key[:])),
 	})
 
 }
 
-func (kr *fileKeyRing) Private(pub []byte) ([]byte, error) {
-	b64 := string(encode(pub[:]))
+func (kr *fileKeyRing) Key(keyId []byte) ([]byte, error) {
+	b64 := string(encode(keyId[:]))
 
-	for _, k := range kr.Keys {
-		if k.Public == b64 {
-			dec, err := decode([]byte(k.Private))
+	for _, ke := range kr.KeyEntries {
+		if ke.KeyId == b64 {
+			dec, err := decode([]byte(ke.Key))
 			if err != nil {
 				return []byte{}, err
 			}
