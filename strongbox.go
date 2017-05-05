@@ -49,7 +49,7 @@ func main() {
 			install()
 		}
 	})
-	app.Command("gen-key", "Generate a new public/private key pair and add it to your strongbox keyring", func(cmd *cli.Cmd) {
+	app.Command("gen-key", "Generate a new key and add it to your strongbox keyring", func(cmd *cli.Cmd) {
 		desc := cmd.StringArg("DESCRIPTION", "new key", "a description for the generated key")
 		cmd.Action = func() {
 			genKey(*desc)
@@ -370,13 +370,13 @@ func (kr *fileKeyRing) Key(keyID []byte) ([]byte, error) {
 				return []byte{}, err
 			}
 			if len(dec) != 32 {
-				return []byte{}, fmt.Errorf("unexpected length of private key: %d", len(dec))
+				return []byte{}, fmt.Errorf("unexpected length of key: %d", len(dec))
 			}
 			return dec, nil
 		}
 	}
 
-	return []byte{}, fmt.Errorf("private key not found for public key '%s'", b64)
+	return []byte{}, fmt.Errorf("key not found for key-id '%s'", b64)
 }
 
 func (kr *fileKeyRing) Load() error {
