@@ -23,9 +23,9 @@ import (
 )
 
 var (
-	keyLoader func(filename string) (key []byte, err error) = key
+	keyLoader = key
 
-	keyRing       KeyRing
+	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
 	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
 )
@@ -39,7 +39,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	keyRing = &fileKeyRing{fileName: filepath.Join(u.HomeDir, ".strongbox_keyring")}
+	kr = &fileKeyRing{fileName: filepath.Join(u.HomeDir, ".strongbox_keyring")}
 }
 
 func main() {
@@ -106,7 +106,7 @@ func install() {
 }
 
 func genKey(desc string) {
-	err := keyRing.Load()
+	err := kr.Load()
 	if err != nil && !os.IsNotExist(err) {
 		log.Fatal(err)
 	}
@@ -117,11 +117,11 @@ func genKey(desc string) {
 		log.Fatal(err)
 	}
 
-	keyId := sha256.Sum256(key)
+	keyID := sha256.Sum256(key)
 
-	keyRing.AddKey(desc, keyId[:], key)
+	kr.AddKey(desc, keyID[:], key)
 
-	err = keyRing.Save()
+	err = kr.Save()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -281,17 +281,17 @@ func decrypt(enc []byte, priv []byte) ([]byte, error) {
 }
 
 func key(filename string) ([]byte, error) {
-	keyId, err := findKey(filename)
+	keyID, err := findKey(filename)
 	if err != nil {
 		return []byte{}, err
 	}
 
-	err = keyRing.Load()
+	err = kr.Load()
 	if err != nil {
 		return []byte{}, err
 	}
 
-	key, err := keyRing.Key(keyId)
+	key, err := kr.Key(keyID)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -333,11 +333,11 @@ func readKey(filename string) ([]byte, error) {
 	return b, nil
 }
 
-type KeyRing interface {
+type keyRing interface {
 	Load() error
 	Save() error
-	AddKey(name string, keyId []byte, key []byte)
-	Key(keyId []byte) ([]byte, error)
+	AddKey(name string, keyID []byte, key []byte)
+	Key(keyID []byte) ([]byte, error)
 }
 
 type fileKeyRing struct {
@@ -346,25 +346,25 @@ type fileKeyRing struct {
 }
 
 type keyEntry struct {
-	Description string `json: description`
-	KeyId       string `json: key-id`
-	Key         string `json: key`
+	Description string `json:"description"`
+	KeyID       string `json:"key-id"`
+	Key         string `json:"key"`
 }
 
-func (kr *fileKeyRing) AddKey(desc string, keyId []byte, key []byte) {
+func (kr *fileKeyRing) AddKey(desc string, keyID []byte, key []byte) {
 	kr.KeyEntries = append(kr.KeyEntries, keyEntry{
 		Description: desc,
-		KeyId:       string(encode(keyId[:])),
+		KeyID:       string(encode(keyID[:])),
 		Key:         string(encode(key[:])),
 	})
 
 }
 
-func (kr *fileKeyRing) Key(keyId []byte) ([]byte, error) {
-	b64 := string(encode(keyId[:]))
+func (kr *fileKeyRing) Key(keyID []byte) ([]byte, error) {
+	b64 := string(encode(keyID[:]))
 
 	for _, ke := range kr.KeyEntries {
-		if ke.KeyId == b64 {
+		if ke.KeyID == b64 {
 			dec, err := decode([]byte(ke.Key))
 			if err != nil {
 				return []byte{}, err
