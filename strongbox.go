@@ -346,9 +346,9 @@ type fileKeyRing struct {
 }
 
 type keyEntry struct {
-	Description string `json:"description"`
-	KeyID       string `json:"key-id"`
-	Key         string `json:"key"`
+	Description string `yaml:"description"`
+	KeyID       string `yaml:"key-id"`
+	Key         string `yaml:"key"`
 }
 
 func (kr *fileKeyRing) AddKey(desc string, keyID []byte, key []byte) {
