@@ -308,10 +308,10 @@ func findKey(filename string) ([]byte, error) {
 				return readKey(keyFilename)
 			}
 		}
-		path = filepath.Dir(path)
 		if path == "." {
 			break
 		}
+		path = filepath.Dir(path)
 	}
 	return []byte{}, fmt.Errorf("failed to find key id for file %s", filename)
 }
