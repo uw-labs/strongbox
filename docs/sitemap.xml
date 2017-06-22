@@ -3,16 +3,16 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   
   <url>
-    <loc>http://uw-labs.github.io/strongbox/</loc>
+    <loc>https://uw-labs.github.io/strongbox/</loc>
   </url>
   
   <url>
-    <loc>http://uw-labs.github.io/strongbox/categories/</loc>
+    <loc>https://uw-labs.github.io/strongbox/categories/</loc>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>http://uw-labs.github.io/strongbox/tags/</loc>
+    <loc>https://uw-labs.github.io/strongbox/tags/</loc>
     <priority>0</priority>
   </url>
   
