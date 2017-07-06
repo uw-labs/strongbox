@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -38,6 +39,28 @@ func testCommand(t *testing.T, dir, name string, arg ...string) (out []byte) {
 	return
 }
 
+func keyIdFromKR(t *testing.T, name string) (keyId string) {
+	kr := make(map[string]interface{})
+	krf, err := ioutil.ReadFile("/home/test/.strongbox_keyring")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = yaml.Unmarshal(krf, kr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kes := kr["keyentries"].([]interface{})
+
+	for k, _ := range kes {
+		desc := kes[k].(map[interface{}]interface{})["description"].(string)
+		if name == desc {
+			return kes[k].(map[interface{}]interface{})["key-id"].(string)
+		}
+	}
+	t.Fatal(fmt.Sprintf("no keyId for give desc: %s", name))
+	return ""
+}
+
 func TestMain(m *testing.M) {
 	setUpCommand("/", "strongbox", "install")
 	setUpCommand("/", "strongbox", "gen-key", "test00")
@@ -51,25 +74,17 @@ func TestMain(m *testing.M) {
 func TestSimpleEnc(t *testing.T) {
 	assert := assert.New(t)
 
+	keyId := keyIdFromKR(t, "test00")
+	secVal := "secret123wombat"
+
 	testWriteFile("/test-proj/.gitattributes", []byte("secret filter=strongbox diff=strongbox"), 0644, t)
-
-	// get key-id
-	kr := make(map[string]interface{})
-	krf, err := ioutil.ReadFile("/home/test/.strongbox_keyring")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = yaml.Unmarshal(krf, kr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyId := kr["keyentries"].([]interface{})[0].(map[interface{}]interface{})["key-id"].(string)
-
 	testWriteFile("/test-proj/.strongbox-keyid", []byte(keyId), 0644, t)
-	testWriteFile("/test-proj/secret", []byte("secret123"), 0644, t)
+	testWriteFile("/test-proj/secret", []byte(secVal), 0644, t)
 	testCommand(t, "/test-proj", "git", "add", ".")
 	testCommand(t, "/test-proj", "git", "commit", "-m", "\"first commit\"")
-	out := testCommand(t, "/test-proj", "git", "show")
+	ptOut := testCommand(t, "/test-proj", "git", "show")
+	encOut := testCommand(t, "/test-proj", "git", "show", "HEAD:secret")
 
-	assert.Contains(string(out), "secret123", "no plaintext")
+	assert.Contains(string(ptOut), secVal, "no plaintext")
+	assert.Contains(string(encOut), "STRONGBOX ENCRYPTED RESOURCE", "no plaintext")
 }
