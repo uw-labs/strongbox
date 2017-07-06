@@ -72,19 +72,35 @@ func TestMain(m *testing.M) {
 }
 
 func TestSimpleEnc(t *testing.T) {
-	assert := assert.New(t)
-
 	keyId := keyIdFromKR(t, "test00")
 	secVal := "secret123wombat"
 
-	testWriteFile("/test-proj/.gitattributes", []byte("secret filter=strongbox diff=strongbox"), 0644, t)
+	ga := `secret filter=strongbox diff=strongbox
+sb-secrets/* filter=strongbox diff=strongbox`
+	testWriteFile("/test-proj/.gitattributes", []byte(ga), 0644, t)
 	testWriteFile("/test-proj/.strongbox-keyid", []byte(keyId), 0644, t)
 	testWriteFile("/test-proj/secret", []byte(secVal), 0644, t)
 	testCommand(t, "/test-proj", "git", "add", ".")
-	testCommand(t, "/test-proj", "git", "commit", "-m", "\"first commit\"")
+	testCommand(t, "/test-proj", "git", "commit", "-m", "\"TestSimpleEnc\"")
 	ptOut := testCommand(t, "/test-proj", "git", "show")
 	encOut := testCommand(t, "/test-proj", "git", "show", "HEAD:secret")
 
-	assert.Contains(string(ptOut), secVal, "no plaintext")
-	assert.Contains(string(encOut), "STRONGBOX ENCRYPTED RESOURCE", "no plaintext")
+	assert.Contains(t, string(ptOut), secVal, "no plaintext")
+	assert.Contains(t, string(encOut), "STRONGBOX ENCRYPTED RESOURCE", "no plaintext")
+}
+
+func TestNestedEnc(t *testing.T) {
+	secVal := "secret123croc"
+
+	testCommand(t, "/test-proj", "mkdir", "-p", "sb-secrets/dir0")
+	testWriteFile("/test-proj/sb-secrets/dir0/sec0", []byte(secVal), 0644, t)
+
+	testCommand(t, "/test-proj", "git", "add", ".")
+	testCommand(t, "/test-proj", "git", "commit", "-m", "\"TestNestedEnc\"")
+
+	ptOut := testCommand(t, "/test-proj", "git", "show")
+	encOut := testCommand(t, "/test-proj", "git", "show", "HEAD:secret")
+
+	assert.Contains(t, string(ptOut), secVal, "no plaintext")
+	assert.Contains(t, string(encOut), "STRONGBOX ENCRYPTED RESOURCE", "no plaintext")
 }
