@@ -98,8 +98,8 @@ func install() {
 	}
 	for _, command := range args {
 		cmd := exec.Command("git", command...)
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			log.Fatal(string(out))
 		}
 	}
 	log.Println("git global configuration updated successfully")
