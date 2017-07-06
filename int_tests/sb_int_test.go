@@ -12,70 +12,46 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMain(m *testing.M) {
-	cmd := exec.Command(
-		"strongbox",
-		"install",
-	)
+func setUpCommand(dir, name string, arg ...string) {
+	cmd := exec.Command(name, arg...)
+	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatal(string(out))
 	}
-	//
-	cmd = exec.Command(
-		"strongbox",
-		"gen-key",
-		"test00",
-	)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		log.Fatal(string(out))
-	}
-	//
-	cmd = exec.Command(
-		"git", "config", "--global", "user.email", "\"you@example.com\"",
-	)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		log.Fatal(string(out))
-	}
-	//
-	cmd = exec.Command(
-		"git", "config", "--global", "user.name", "\"test\"",
-	)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		log.Fatal(string(out))
-	}
+}
 
+func testWriteFile(filename string, data []byte, perm os.FileMode, t *testing.T) {
+	err := ioutil.WriteFile(filename, data, perm)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testCommand(t *testing.T, dir, name string, arg ...string) (out []byte) {
+	cmd := exec.Command(name, arg...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(string(out))
+	}
+	return
+}
+
+func TestMain(m *testing.M) {
+	setUpCommand("/", "strongbox", "install")
+	setUpCommand("/", "strongbox", "gen-key", "test00")
+	setUpCommand("/", "git", "config", "--global", "user.email", "\"you@example.com\"")
+	setUpCommand("/", "git", "config", "--global", "user.name", "\"test\"")
+	setUpCommand("/", "mkdir", "/test-proj")
+	setUpCommand("/test-proj", "git", "init")
 	os.Exit(m.Run())
 }
 
 func TestSimpleEnc(t *testing.T) {
-	cmd := exec.Command(
-		"mkdir",
-		"/test-proj",
-	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(string(out))
-	}
+	assert := assert.New(t)
 
-	//
-	cmd = exec.Command(
-		"git",
-		"init",
-	)
-	cmd.Dir = "/test-proj"
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(string(out))
-	}
-
-	err = ioutil.WriteFile("/test-proj/.gitattributes", []byte("secret filter=strongbox diff=strongbox"), 0644)
-	if err != nil {
-		t.Fatal(string(out))
-	}
+	testWriteFile("/test-proj/.gitattributes", []byte("secret filter=strongbox diff=strongbox"), 0644, t)
 
 	// get key-id
 	kr := make(map[string]interface{})
@@ -89,48 +65,11 @@ func TestSimpleEnc(t *testing.T) {
 	}
 	keyId := kr["keyentries"].([]interface{})[0].(map[interface{}]interface{})["key-id"].(string)
 
-	err = ioutil.WriteFile("/test-proj/.strongbox-keyid", []byte(keyId), 0644)
-	if err != nil {
-		t.Fatal(string(out))
-	}
+	testWriteFile("/test-proj/.strongbox-keyid", []byte(keyId), 0644, t)
+	testWriteFile("/test-proj/secret", []byte("secret123"), 0644, t)
+	testCommand(t, "/test-proj", "git", "add", ".")
+	testCommand(t, "/test-proj", "git", "commit", "-m", "\"first commit\"")
+	out := testCommand(t, "/test-proj", "git", "show")
 
-	err = ioutil.WriteFile("/test-proj/secret", []byte("secret123"), 0644)
-	if err != nil {
-		t.Fatal(string(out))
-	}
-
-	//
-	cmd = exec.Command(
-		"git",
-		"add",
-		".",
-	)
-	cmd.Dir = "/test-proj"
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(string(out))
-	}
-	//
-	cmd = exec.Command(
-		"git",
-		"commit",
-		"-m",
-		"\"first commit\"",
-	)
-	cmd.Dir = "/test-proj"
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(string(out))
-	}
-	//
-	cmd = exec.Command(
-		"git",
-		"show",
-	)
-	cmd.Dir = "/test-proj"
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(string(out))
-	}
-	assert.Contains(t, string(out), "secret123", "no plaintext")
+	assert.Contains(string(out), "secret123", "no plaintext")
 }
