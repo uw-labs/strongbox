@@ -1,0 +1,18 @@
+# Build customization
+builds:
+  - binary: strongbox
+    goos:
+      - windows
+      - darwin
+      - linux
+      - freebsd
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+
+release:
+  github:
+    owner: damonpetta
+    name: strongbox
