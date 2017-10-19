@@ -49,6 +49,21 @@ func main() {
 			install()
 		}
 	})
+	app.Command("import", "import a key into your keyring", func(cmd *cli.Cmd) {
+		app.Spec = "[-f]"
+		filename := cmd.StringOpt("f filename", "", "file to import the strongbox keys")
+		cmd.Action = func() {
+			if filename != nil {
+				f, err := os.Open(*filename)
+				if err != nil {
+					importKeys(f)
+				}
+				log.Fatal(err)
+			} else {
+				importKeys(os.Stdin)
+			}
+		}
+	})
 	app.Command("gen-key", "Generate a new key and add it to your strongbox keyring", func(cmd *cli.Cmd) {
 		desc := cmd.StringArg("DESCRIPTION", "new key", "a description for the generated key")
 		cmd.Action = func() {
@@ -173,6 +188,27 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, key []by
 	if _, err := io.Copy(w, bytes.NewReader(out)); err != nil {
 		log.Println(err)
 	}
+}
+
+func importKeys(r io.Reader) error {
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	var keyEntries []keyEntry
+	if err := yaml.Unmarshal(data, &keyEntries); err != nil {
+		return err
+	}
+	if err := kr.Load(); err != nil {
+		return err
+	}
+	for _, keyEntry := range keyEntries {
+		if _, err = kr.Key([]byte(keyEntry.KeyID)); err == nil {
+			kr.AddKey(keyEntry.Description, []byte(keyEntry.KeyID), []byte(keyEntry.Key))
+		}
+	}
+	return kr.Save()
 }
 
 func encrypt(b []byte, key []byte) ([]byte, error) {
