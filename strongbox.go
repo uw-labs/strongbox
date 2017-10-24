@@ -28,6 +28,8 @@ var (
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
 	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
+
+	keyNotFound = errors.New("key not found")
 )
 
 func init() {
@@ -158,7 +160,12 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, key []by
 	}
 	key, err := keyLoader(filename)
 	if err != nil {
-		log.Println(err)
+		// don't log error if its keyNotFound
+		switch err {
+		case keyNotFound:
+		default:
+			log.Println(err)
+		}
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
 		}
@@ -179,7 +186,7 @@ func encrypt(b []byte, key []byte) ([]byte, error) {
 
 	if bytes.HasPrefix(b, prefix) {
 		// File is encrypted, copy it as is
-		return nil, errors.New("already encrypted")
+		return nil, errors.New("already encrypted, please checkout the file again (`rm <file>; git checkout <file>`) to get plain-text local version")
 	}
 
 	b = compress(b)
@@ -376,7 +383,7 @@ func (kr *fileKeyRing) Key(keyID []byte) ([]byte, error) {
 		}
 	}
 
-	return []byte{}, fmt.Errorf("key not found for key-id '%s'", b64)
+	return []byte{}, keyNotFound
 }
 
 func (kr *fileKeyRing) Load() error {
