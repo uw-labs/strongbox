@@ -1,0 +1,22 @@
+version: 2
+executorType: docker
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.8
+    working_directory: /go/src/github.com/uw-labs/strongbox
+    steps:
+      - type: setup-docker-engine
+      - checkout
+      - run:  make test
+      - run: go get
+      - run: go build
+      - run: go clean
+      - type: deploy
+        name: "Publish release for tags"
+        command: |
+          set -eu
+          TAG=$(git describe --tags)
+          if [[ $TAG =~ ^[0-9]+(\.[0-9]+)+(-rc[0-9]+)?(-alpha[0-9]+)?$ ]]; then
+            curl -sL https://git.io/goreleaser | bash
+          fi
