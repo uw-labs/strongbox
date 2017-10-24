@@ -14,5 +14,5 @@ builds:
 
 release:
   github:
-    owner: damonpetta
+    owner: uw-labs
     name: strongbox

@@ -8,7 +8,7 @@ jobs:
     steps:
       - type: setup-docker-engine
       - checkout
-      - run:  make test
+      - run: make test
       - run: go get
       - run: go build
       - run: go clean
