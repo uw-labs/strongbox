@@ -3,7 +3,7 @@ executorType: docker
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.8
+      - image: circleci/golang:1.9
     working_directory: /go/src/github.com/uw-labs/strongbox
     steps:
       - type: setup-docker-engine
