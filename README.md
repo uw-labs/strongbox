@@ -30,6 +30,12 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
  1. Include a `.strongbox-keyid` file in your repository containing public key you want to use (typically by copying a public key from `$HOME/.strongbox_keyring` )  This can be in the same directory as the protected resource(s) or any parent directory.   When searching for `.strongbox-keyid` for a given resource, strongbox will recurse up the directory structure until it finds the file.  This allows using different keys for different subdirectories within a repository.
 
+## Verification
+
+You can verify the files have been encrypted in the commit before pushing by running `git show HEAD:/path/to/file`
+
+What you should see is a Strongbox encrypted resource, and this is what would be pushed to the remote.
+
 ## Security
 
 Strongbox uses SIV-AES as defined in rfc5297 in order to achieve authenticated deterministic encryption.
