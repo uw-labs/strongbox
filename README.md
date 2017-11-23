@@ -16,15 +16,17 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
  1. As a one time action, install the plugin by running `strongbox install`. This will edit global git config to enable strongbox filter and diff configuration.
 
- 1. In each repository you want to use strongbox, create one or more `.gitattributes` files containing the file patterns you want to be managed by strongbox.
+ 1. In each repository you want to use strongbox, create `.gitattributes` file containing the patterns to be managed by strongbox.
+
     For example:
+
     ```
-    secrets-strongbox/* filter=strongbox diff=strongbox
+    secrets/* filter=strongbox diff=strongbox
     ```
 
  1. Generate a key to use for the encryption, for example:
     ```
-    strongbox gen-key "my key"
+    strongbox gen-key my-key
     ```
     This will add a new key to `$HOME/.strongbox_keyring`
 
@@ -35,6 +37,18 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 You can verify the files have been encrypted in the commit before pushing by running `git show HEAD:/path/to/file`
 
 What you should see is a Strongbox encrypted resource, and this is what would be pushed to the remote.
+
+Compare an entire branch (as it would appear on the remote) to master:
+
+```
+git diff-index -p master
+```
+
+## Key rotation
+
+To rotate keys, update the `.strongbox-keyid` with the new key id, then `touch`
+all files/directories covered by `.gitattributes`. All affected files should
+now show up as "changed".
 
 ## Security
 
