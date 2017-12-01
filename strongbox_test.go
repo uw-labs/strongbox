@@ -41,7 +41,7 @@ func TestMultipleClean(t *testing.T) {
 	var doubleCleaned bytes.Buffer
 	clean(bytes.NewReader(cleaned.Bytes()), &doubleCleaned, "")
 
-	assert.Equal(cleaned.Bytes(), doubleCleaned.Bytes())
+	assert.Equal(string(cleaned.Bytes()), string(doubleCleaned.Bytes()))
 }
 
 func TestSmudgeAlreadyPlaintext(t *testing.T) {
