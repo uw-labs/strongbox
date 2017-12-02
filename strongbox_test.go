@@ -52,7 +52,7 @@ func TestSmudgeAlreadyPlaintext(t *testing.T) {
 	var smudged bytes.Buffer
 	smudge(bytes.NewReader(plain), &smudged, "")
 
-	assert.Equal(plain, smudged.Bytes())
+	assert.Equal(string(plain), string(smudged.Bytes()))
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -68,7 +68,7 @@ func TestRoundTrip(t *testing.T) {
 	var smudged bytes.Buffer
 	smudge(bytes.NewReader(cleaned.Bytes()), &smudged, "")
 
-	assert.Equal(plain, smudged.Bytes())
+	assert.Equal(string(plain), string(smudged.Bytes()))
 }
 
 func TestDeterministic(t *testing.T) {
@@ -82,5 +82,5 @@ func TestDeterministic(t *testing.T) {
 	var cleaned2 bytes.Buffer
 	clean(bytes.NewReader(plain), &cleaned2, "")
 
-	assert.Equal(cleaned1, cleaned2)
+	assert.Equal(string(cleaned1.Bytes()), string(cleaned2.Bytes()))
 }
