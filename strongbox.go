@@ -33,7 +33,7 @@ var (
 )
 
 func init() {
-	log.SetPrefix("strongbox : ")
+	log.SetPrefix("strongbox: ")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Set up keyring file name
@@ -182,6 +182,16 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// file is a non-strongbox file, copy as is and exit
+	if !bytes.HasPrefix(in, prefix) {
+		_, err := io.Copy(w, bytes.NewReader(in))
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	key, err := keyLoader(filename)
 	if err != nil {
 		// don't log error if its keyNotFound
@@ -272,9 +282,6 @@ func decode(encoded []byte) ([]byte, error) {
 }
 
 func decrypt(enc []byte, priv []byte) ([]byte, error) {
-	if !bytes.Equal(prefix, enc[0:len(prefix)]) {
-		return nil, errors.New("unexpected prefix")
-	}
 	// strip prefix and any comment up to end of line
 	spl := bytes.SplitN(enc, []byte("\n"), 2)
 	if len(spl) != 2 {
