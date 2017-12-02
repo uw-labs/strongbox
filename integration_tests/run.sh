@@ -9,5 +9,5 @@ export PATH=${PATH}:${GOPATH}/bin
 go get -t .
 go install
 
-go get -t ./int_tests/
-go test -v ./int_tests/
+go get -t ./integration_tests/
+go test -v ./integration_tests/
