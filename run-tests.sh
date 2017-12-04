@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-export USER=${USER:-test}
+export USER=${USER:-root}
 export PATH=$PATH:`pwd`:$GOPATH/bin
 
 go get -t .
