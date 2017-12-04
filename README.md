@@ -14,7 +14,7 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
 ## Usage
 
- 1. As a one time action, install the plugin by running `strongbox install`. This will edit global git config to enable strongbox filter and diff configuration.
+ 1. As a one time action, configure the plugin by running `strongbox git-config`. This will edit global git config to enable strongbox filter and diff configuration.
 
  1. In each repository you want to use strongbox, create `.gitattributes` file containing the patterns to be managed by strongbox.
 

@@ -62,7 +62,7 @@ func keyIdFromKR(t *testing.T, name string) (keyId string) {
 }
 
 func TestMain(m *testing.M) {
-	setUpCommand("/", "strongbox", "install")
+	setUpCommand("/", "strongbox", "git-config")
 	setUpCommand("/", "strongbox", "gen-key", "test00")
 	setUpCommand("/", "git", "config", "--global", "user.email", "\"you@example.com\"")
 	setUpCommand("/", "git", "config", "--global", "user.name", "\"test\"")
