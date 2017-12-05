@@ -7,4 +7,4 @@ build-test-image:
 	docker build -t $(IMAGE) -f integration_tests/Dockerfile .
 
 test: build-test-image
-	docker run --rm $(IMAGE) --tmpfs /root:rw
+	docker run --tmpfs /root:rw --rm $(IMAGE)
