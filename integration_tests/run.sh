@@ -1,10 +1,7 @@
 export CGO_ENABLED=0
 
-export USER=test
-export HOME=/home/${USER}
-mkdir ${HOME}
-
-export PATH=${PATH}:${GOPATH}/bin
+export USER=${USER:-root}
+export PATH=$PATH:$(pwd):$GOPATH/bin
 
 go get -t .
 go install

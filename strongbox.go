@@ -46,9 +46,9 @@ func init() {
 
 func main() {
 	app := cli.App("strongbox", "Frictionless encryption workflow for git users")
-	app.Command("install", "configure git for strongbox use", func(cmd *cli.Cmd) {
+	app.Command("git-config", "configure git for strongbox use", func(cmd *cli.Cmd) {
 		cmd.Action = func() {
-			install()
+			gitConfig()
 		}
 	})
 	app.Command("gen-key", "Generate a new key and add it to your strongbox keyring", func(cmd *cli.Cmd) {
@@ -90,7 +90,7 @@ func main() {
 	}
 }
 
-func install() {
+func gitConfig() {
 	args := [][]string{
 		{"config", "--global", "--replace-all", "filter.strongbox.clean", "strongbox clean %f"},
 		{"config", "--global", "--replace-all", "filter.strongbox.smudge", "strongbox smudge %f"},
