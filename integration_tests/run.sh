@@ -1,7 +1,7 @@
 export CGO_ENABLED=0
 
 export USER=${USER:-root}
-export PATH=$PATH:$(pwd):$GOPATH/bin
+export PATH=$PATH:$GOPATH/bin
 
 go get -t .
 go install
