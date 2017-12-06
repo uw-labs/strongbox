@@ -1,4 +1,4 @@
-# Strongbox
+![Strongbox](strongbox-logo.png)
 
 Encryption for git users.
 

@@ -1,7 +1,6 @@
 IMAGE=strongbox-test
 
-documentation:
-	cd docs/src && hugo -b https://uw-labs.github.io/strongbox/
+.DEFAULT_GOAL := test
 
 build-test-image:
 	docker build -t $(IMAGE) -f integration_tests/Dockerfile .
