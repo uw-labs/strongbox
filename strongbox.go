@@ -33,7 +33,7 @@ var (
 )
 
 func init() {
-	log.SetPrefix("strongbox : ")
+	log.SetPrefix("strongbox: ")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Set up keyring file name
@@ -146,18 +146,52 @@ func diff(filename string) {
 }
 
 func clean(r io.Reader, w io.Writer, filename string) {
-	filter(r, w, filename, encrypt)
-}
-
-func smudge(r io.Reader, w io.Writer, filename string) {
-	filter(r, w, filename, decrypt)
-}
-
-func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, key []byte) ([]byte, error)) {
+	// Read the file, fail on error
 	in, err := ioutil.ReadAll(r)
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Check the file is plaintext, if its an encrypted strongbox file, copy as is, and exit 0
+	if bytes.HasPrefix(in, prefix) {
+		_, err := io.Copy(w, bytes.NewReader(in))
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	// File is plaintext and needs to be encrypted, get the key, fail on error
+	key, err := keyLoader(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// encrypt the file, fail on error
+	out, err := encrypt(in, key)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// write out encrypted file, fail on error
+	_, err = io.Copy(w, bytes.NewReader(out))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// Called by git on `git checkout`
+func smudge(r io.Reader, w io.Writer, filename string) {
+	in, err := ioutil.ReadAll(r)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// file is a non-strongbox file, copy as is and exit
+	if !bytes.HasPrefix(in, prefix) {
+		_, err := io.Copy(w, bytes.NewReader(in))
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	key, err := keyLoader(filename)
 	if err != nil {
 		// don't log error if its keyNotFound
@@ -166,13 +200,14 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, key []by
 		default:
 			log.Println(err)
 		}
+		// Couldn't load the key, just copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
 		}
 		return
 	}
 
-	out, err := f(in, key)
+	out, err := decrypt(in, key)
 	if err != nil {
 		log.Println(err)
 		out = in
@@ -183,24 +218,14 @@ func filter(r io.Reader, w io.Writer, filename string, f func(b []byte, key []by
 }
 
 func encrypt(b []byte, key []byte) ([]byte, error) {
-
-	if bytes.HasPrefix(b, prefix) {
-		// File is encrypted, copy it as is
-		return nil, errors.New("already encrypted, please checkout the file again (`rm <file>; git checkout <file>`) to get plain-text local version")
-	}
-
 	b = compress(b)
-
 	out, err := siv.Encrypt(nil, key, b, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	var buf []byte
 	buf = append(buf, defaultPrefix...)
-
 	b64 := encode(out)
-
 	for len(b64) > 0 {
 		l := 76
 		if len(b64) < 76 {
@@ -231,13 +256,10 @@ func decompress(b []byte) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	b, err = ioutil.ReadAll(zr)
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	if err := zr.Close(); err != nil {
 		log.Fatal(err)
 	}
@@ -260,30 +282,21 @@ func decode(encoded []byte) ([]byte, error) {
 }
 
 func decrypt(enc []byte, priv []byte) ([]byte, error) {
-
-	if !bytes.Equal(prefix, enc[0:len(prefix)]) {
-		return nil, errors.New("unexpected prefix")
-	}
-
 	// strip prefix and any comment up to end of line
 	spl := bytes.SplitN(enc, []byte("\n"), 2)
 	if len(spl) != 2 {
 		return nil, errors.New("Couldn't split on end of line")
 	}
 	b64encoded := spl[1]
-
 	b64decoded, err := decode(b64encoded)
 	if err != nil {
 		return nil, err
 	}
-
 	decrypted, err := siv.Decrypt(priv, b64decoded, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	decrypted = decompress(decrypted)
-
 	return decrypted, nil
 }
 

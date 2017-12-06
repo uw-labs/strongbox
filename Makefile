@@ -4,7 +4,7 @@ documentation:
 	cd docs/src && hugo -b https://uw-labs.github.io/strongbox/
 
 build-test-image:
-	docker build -t $(IMAGE) -f Dockerfile.test .
+	docker build -t $(IMAGE) -f integration_tests/Dockerfile .
 
 test: build-test-image
-	docker run $(IMAGE)
+	docker run --tmpfs /root:rw --rm $(IMAGE)
