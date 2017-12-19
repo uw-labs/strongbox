@@ -20,3 +20,11 @@ jobs:
           if [[ $TAG =~ ^[0-9]+(\.[0-9]+)+(-rc[0-9]+)?(-alpha[0-9]+)?$ ]]; then
             curl -sL https://git.io/goreleaser | bash
           fi
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /.*/
