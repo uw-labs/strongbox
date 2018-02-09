@@ -20,7 +20,7 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
 ## Usage
 
-1. As a one time action, install the plugin by running `strongbox git-config`.
+1. As a one time action, install the plugin by running `strongbox -config`.
    This will edit global git config to enable strongbox filter and diff
    configuration.
 
@@ -35,7 +35,7 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
 3. Generate a key to use for the encryption, for example:
    ```
-   strongbox gen-key my-key
+   strongbox -key my-key
    ```
    This will add a new key to `$HOME/.strongbox_keyring`
 

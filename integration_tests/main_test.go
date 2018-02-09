@@ -72,12 +72,12 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "%v", string(out))
 		os.Exit(1)
 	}
-	out, err = command("/", "strongbox", "git-config")
+	out, err = command("/", "strongbox", "-config")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", string(out))
 		os.Exit(1)
 	}
-	out, err = command("/", "strongbox", "gen-key", "test00")
+	out, err = command("/", "strongbox", "-key", "test00")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", string(out))
 		os.Exit(1)
@@ -138,7 +138,7 @@ func TestMissingKey(t *testing.T) {
 	// remove the key for encryption
 	assertCommand(t, "/", "mv", HOME+"/.strongbox_keyring", HOME+"/.strongbox_keyring.bkup")
 
-	assertCommand(t, "/", "strongbox", "gen-key", "tmp")
+	assertCommand(t, "/", "strongbox", "-key", "tmp")
 
 	assertWriteFile(t, repoDir+"/secrets/sec-missing-key", []byte(secVal), 0644)
 	_, err := command(repoDir, "git", "add", ".")
