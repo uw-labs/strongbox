@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	priv []byte
+	priv  []byte
+	plain = []byte("hello world. this is some plain text for testing")
 )
 
 func TestMain(m *testing.M) {
@@ -33,8 +34,6 @@ func testKeyLoader(string) ([]byte, error) {
 func TestMultipleClean(t *testing.T) {
 	assert := assert.New(t)
 
-	plain := []byte("hello world. this is some plain text for testing")
-
 	var cleaned bytes.Buffer
 	clean(bytes.NewReader(plain), &cleaned, "")
 
@@ -47,8 +46,6 @@ func TestMultipleClean(t *testing.T) {
 func TestSmudgeAlreadyPlaintext(t *testing.T) {
 	assert := assert.New(t)
 
-	plain := []byte("hello world. this is some plain text for testing")
-
 	var smudged bytes.Buffer
 	smudge(bytes.NewReader(plain), &smudged, "")
 
@@ -57,8 +54,6 @@ func TestSmudgeAlreadyPlaintext(t *testing.T) {
 
 func TestRoundTrip(t *testing.T) {
 	assert := assert.New(t)
-
-	plain := []byte("hello world. this is some plain text for testing")
 
 	var cleaned bytes.Buffer
 	clean(bytes.NewReader(plain), &cleaned, "")
@@ -74,8 +69,6 @@ func TestRoundTrip(t *testing.T) {
 func TestDeterministic(t *testing.T) {
 	assert := assert.New(t)
 
-	plain := []byte("hello world. this is some plain text for testing")
-
 	var cleaned1 bytes.Buffer
 	clean(bytes.NewReader(plain), &cleaned1, "")
 
@@ -83,4 +76,14 @@ func TestDeterministic(t *testing.T) {
 	clean(bytes.NewReader(plain), &cleaned2, "")
 
 	assert.Equal(string(cleaned1.Bytes()), string(cleaned2.Bytes()))
+}
+
+func BenchmarkRoundTripPlain(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		var cleaned bytes.Buffer
+		clean(bytes.NewReader(plain), &cleaned, "")
+
+		var smudged bytes.Buffer
+		smudge(bytes.NewReader(cleaned.Bytes()), &smudged, "")
+	}
 }
