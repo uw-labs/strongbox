@@ -32,17 +32,17 @@ var (
 	keyNotFound = errors.New("key not found")
 
 	// flags
-	flagConfig = flag.Bool("config", false, "Configure git for strongbox use")
-	flagKey    = flag.String("key", "", "Generate a new key and add it to your strongbox keyring")
-	flagClean  = flag.String("clean", "", "intended to be called internally by git")
-	flagSmudge = flag.String("smudge", "", "intended to be called internally by git")
-	flagDiff   = flag.String("diff", "", "intended to be called internally by git")
+	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
+	flagGenKey    = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
+	flagClean     = flag.String("clean", "", "intended to be called internally by git")
+	flagSmudge    = flag.String("smudge", "", "intended to be called internally by git")
+	flagDiff      = flag.String("diff", "", "intended to be called internally by git")
 )
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -config\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -key key-name\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-key key-name\n")
 	os.Exit(2)
 }
 
@@ -65,13 +65,13 @@ func main() {
 		usage()
 	}
 
-	if *flagConfig {
+	if *flagGitConfig {
 		gitConfig()
 		return
 	}
 
-	if *flagKey != "" {
-		genKey(*flagKey)
+	if *flagGenKey != "" {
+		genKey(*flagGenKey)
 		return
 	}
 
