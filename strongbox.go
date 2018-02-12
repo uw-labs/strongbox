@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -18,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/jacobsa/crypto/siv"
-	"github.com/jawher/mow.cli"
 	"gopkg.in/yaml.v2"
 )
 
@@ -30,11 +30,28 @@ var (
 	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
 
 	keyNotFound = errors.New("key not found")
+
+	// flags
+	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
+	flagGenKey    = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
+	flagClean     = flag.String("clean", "", "intended to be called internally by git")
+	flagSmudge    = flag.String("smudge", "", "intended to be called internally by git")
+	flagDiff      = flag.String("diff", "", "intended to be called internally by git")
 )
 
-func init() {
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage:\n\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-key key-name\n")
+	os.Exit(2)
+}
+
+func main() {
 	log.SetPrefix("strongbox: ")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	flag.Usage = usage
+	flag.Parse()
 
 	// Set up keyring file name
 	u, err := user.Current()
@@ -42,61 +59,43 @@ func init() {
 		log.Fatal(err)
 	}
 	kr = &fileKeyRing{fileName: filepath.Join(u.HomeDir, ".strongbox_keyring")}
-}
 
-func main() {
-	app := cli.App("strongbox", "Frictionless encryption workflow for git users")
-	app.Command("git-config", "configure git for strongbox use", func(cmd *cli.Cmd) {
-		cmd.Action = func() {
-			gitConfig()
-		}
-	})
-	app.Command("gen-key", "Generate a new key and add it to your strongbox keyring", func(cmd *cli.Cmd) {
-		desc := cmd.StringArg("DESCRIPTION", "new key", "a description for the generated key")
-		cmd.Action = func() {
-			genKey(*desc)
-		}
-	})
-	app.Command("clean", "intended to be called internally by git", func(cmd *cli.Cmd) {
-		filename := cmd.String(cli.StringArg{
-			Name: "FILENAME",
-			Desc: "Full relative path name of file. Invoked by git",
-		})
-		cmd.Action = func() {
-			clean(os.Stdin, os.Stdout, *filename)
-		}
-	})
-	app.Command("smudge", "intended to be called internally by git", func(cmd *cli.Cmd) {
-		filename := cmd.String(cli.StringArg{
-			Name: "FILENAME",
-			Desc: "Full relative path name of file. Invoked by git",
-		})
-		cmd.Action = func() {
-			smudge(os.Stdin, os.Stdout, *filename)
-		}
-	})
-	app.Command("diff", "intended to be called internally by git", func(cmd *cli.Cmd) {
-		filename := cmd.String(cli.StringArg{
-			Name: "FILENAME",
-			Desc: "Full relative path name of file. Invoked by git",
-		})
-		cmd.Action = func() {
-			diff(*filename)
-		}
-	})
+	// only a single flag has been set
+	if flag.NFlag() != 1 {
+		usage()
+	}
 
-	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
+	if *flagGitConfig {
+		gitConfig()
+		return
+	}
+
+	if *flagGenKey != "" {
+		genKey(*flagGenKey)
+		return
+	}
+
+	if *flagClean != "" {
+		clean(os.Stdin, os.Stdout, *flagClean)
+		return
+	}
+	if *flagSmudge != "" {
+		smudge(os.Stdin, os.Stdout, *flagSmudge)
+		return
+	}
+	if *flagDiff != "" {
+		diff(*flagDiff)
+		return
 	}
 }
 
 func gitConfig() {
 	args := [][]string{
-		{"config", "--global", "--replace-all", "filter.strongbox.clean", "strongbox clean %f"},
-		{"config", "--global", "--replace-all", "filter.strongbox.smudge", "strongbox smudge %f"},
+		{"config", "--global", "--replace-all", "filter.strongbox.clean", "strongbox -clean %f"},
+		{"config", "--global", "--replace-all", "filter.strongbox.smudge", "strongbox -smudge %f"},
 		{"config", "--global", "--replace-all", "filter.strongbox.required", "true"},
 
-		{"config", "--global", "--replace-all", "diff.strongbox.textconv", "strongbox diff"},
+		{"config", "--global", "--replace-all", "diff.strongbox.textconv", "strongbox -diff"},
 	}
 	for _, command := range args {
 		cmd := exec.Command("git", command...)
