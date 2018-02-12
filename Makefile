@@ -7,3 +7,6 @@ build-test-image:
 
 test: build-test-image
 	docker run --tmpfs /root:rw --rm $(IMAGE)
+
+bench:
+	go test -bench=.
