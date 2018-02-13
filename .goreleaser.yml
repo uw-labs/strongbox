@@ -1,5 +1,9 @@
 # Build customization
 builds:
+  - ldflags: -s -extldflags "-static"
+    env:
+      - CGO_ENABLED=0
+
   - binary: strongbox
     goos:
       - windows
