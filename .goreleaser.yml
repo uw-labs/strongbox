@@ -1,6 +1,9 @@
 # Build customization
 builds:
-  - binary: strongbox
+  - ldflags: -s -extldflags "-static"
+    env:
+      - CGO_ENABLED=0
+
     goos:
       - windows
       - darwin
