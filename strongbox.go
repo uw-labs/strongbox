@@ -54,11 +54,20 @@ func main() {
 	flag.Parse()
 
 	// Set up keyring file name
+	home := ""
 	u, err := user.Current()
 	if err != nil {
-		log.Fatal(err)
+		// Possibly compiled without CGO and syscall isn't implemented,
+		// try to grab the environment variable
+		home = os.Getenv("HOME")
+		if home == "" {
+			log.Fatal("Could not call os/user.Current() or find $HOME. Please recompile with CGO enabled or set $HOME")
+		}
+	} else {
+		home = u.HomeDir
 	}
-	kr = &fileKeyRing{fileName: filepath.Join(u.HomeDir, ".strongbox_keyring")}
+
+	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
 
 	// only a single flag has been set
 	if flag.NFlag() != 1 {
