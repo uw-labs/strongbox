@@ -58,10 +58,10 @@ func main() {
 	u, err := user.Current()
 	if err != nil {
 		// Possibly compiled without CGO and syscall isn't implemented,
-		// try to grab the environmet variable
+		// try to grab the environment variable
 		home = os.Getenv("HOME")
 		if home == "" {
-			log.Fatal("Could not call os/user.Current() or find $HOME. Please recoming with CGO enabled or set $HOME")
+			log.Fatal("Could not call os/user.Current() or find $HOME. Please recompile with CGO enabled or set $HOME")
 		}
 	} else {
 		home = u.HomeDir
