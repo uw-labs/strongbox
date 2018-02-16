@@ -1,6 +1,6 @@
 # Build customization
 builds:
-  - ldflags: -s -extldflags "-static"
+  - ldflags: -s -extldflags "-static" -X "main.version=git-tag:`{{.Env.CIRCLE_TAG}}`, git-sha1=`{{.Env.CIRCLE_SHA1}}`"
     env:
       - CGO_ENABLED=0
 
