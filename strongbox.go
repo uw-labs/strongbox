@@ -37,12 +37,16 @@ var (
 	flagClean     = flag.String("clean", "", "intended to be called internally by git")
 	flagSmudge    = flag.String("smudge", "", "intended to be called internally by git")
 	flagDiff      = flag.String("diff", "", "intended to be called internally by git")
+	flagVersion   = flag.Bool("version", false, "Strongbox version")
+
+	version = ""
 )
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-key key-name\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -version\n")
 	os.Exit(2)
 }
 
@@ -68,6 +72,11 @@ func main() {
 	}
 
 	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
+
+	if *flagVersion || (flag.NArg() == 1 && flag.Arg(0) == "version") {
+		fmt.Println(version)
+		return
+	}
 
 	// only a single flag has been set
 	if flag.NFlag() != 1 {
