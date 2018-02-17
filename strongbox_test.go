@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"testing"
 
@@ -10,8 +12,8 @@ import (
 )
 
 var (
-	priv  []byte
-	plain = []byte("hello world. this is some plain text for testing")
+	priv, pub []byte
+	plain     = []byte("hello world. this is some plain text for testing")
 )
 
 func TestMain(m *testing.M) {
@@ -22,13 +24,16 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
+	keyID := sha256.Sum256(priv)
+	pub = keyID[:]
+
 	keyLoader = testKeyLoader
 
 	os.Exit(m.Run())
 }
 
-func testKeyLoader(string) ([]byte, error) {
-	return priv, nil
+func testKeyLoader(string) ([]byte, []byte, error) {
+	return priv, pub, nil
 }
 
 func TestMultipleClean(t *testing.T) {
@@ -39,6 +44,10 @@ func TestMultipleClean(t *testing.T) {
 
 	var doubleCleaned bytes.Buffer
 	clean(bytes.NewReader(cleaned.Bytes()), &doubleCleaned, "")
+
+	if testing.Verbose() {
+		fmt.Printf("%s", string(cleaned.Bytes()))
+	}
 
 	assert.Equal(string(cleaned.Bytes()), string(doubleCleaned.Bytes()))
 }

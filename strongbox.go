@@ -27,7 +27,7 @@ var (
 
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
+	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox ; strongbox-version: %s ; key-id: %s\n"
 
 	keyNotFound = errors.New("key not found")
 
@@ -177,12 +177,12 @@ func clean(r io.Reader, w io.Writer, filename string) {
 		return
 	}
 	// File is plaintext and needs to be encrypted, get the key, fail on error
-	key, err := keyLoader(filename)
+	key, keyID, err := keyLoader(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// encrypt the file, fail on error
-	out, err := encrypt(in, key)
+	out, err := encrypt(in, key, keyID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 		return
 	}
 
-	key, err := keyLoader(filename)
+	key, _, err := keyLoader(filename)
 	if err != nil {
 		// don't log error if its keyNotFound
 		switch err {
@@ -234,14 +234,14 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	}
 }
 
-func encrypt(b []byte, key []byte) ([]byte, error) {
+func encrypt(b, key, keyID []byte) ([]byte, error) {
 	b = compress(b)
 	out, err := siv.Encrypt(nil, key, b, nil)
 	if err != nil {
 		return nil, err
 	}
 	var buf []byte
-	buf = append(buf, defaultPrefix...)
+	buf = append(buf, []byte(fmt.Sprintf(defaultPrefix, version, string(encode(keyID[:]))))...)
 	b64 := encode(out)
 	for len(b64) > 0 {
 		l := 76
@@ -317,23 +317,23 @@ func decrypt(enc []byte, priv []byte) ([]byte, error) {
 	return decrypted, nil
 }
 
-func key(filename string) ([]byte, error) {
+func key(filename string) ([]byte, []byte, error) {
 	keyID, err := findKey(filename)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, []byte{}, err
 	}
 
 	err = kr.Load()
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, []byte{}, err
 	}
 
 	key, err := kr.Key(keyID)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, []byte{}, err
 	}
 
-	return key, nil
+	return key, keyID, nil
 }
 
 func findKey(filename string) ([]byte, error) {
