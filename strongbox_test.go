@@ -40,7 +40,7 @@ func TestMultipleClean(t *testing.T) {
 	var doubleCleaned bytes.Buffer
 	clean(bytes.NewReader(cleaned.Bytes()), &doubleCleaned, "")
 
-	assert.Equal(string(cleaned.Bytes()), string(doubleCleaned.Bytes()))
+	assert.Equal(cleaned.String(), doubleCleaned.String())
 }
 
 func TestSmudgeAlreadyPlaintext(t *testing.T) {
@@ -49,7 +49,7 @@ func TestSmudgeAlreadyPlaintext(t *testing.T) {
 	var smudged bytes.Buffer
 	smudge(bytes.NewReader(plain), &smudged, "")
 
-	assert.Equal(string(plain), string(smudged.Bytes()))
+	assert.Equal(string(plain), smudged.String())
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -63,7 +63,7 @@ func TestRoundTrip(t *testing.T) {
 	var smudged bytes.Buffer
 	smudge(bytes.NewReader(cleaned.Bytes()), &smudged, "")
 
-	assert.Equal(string(plain), string(smudged.Bytes()))
+	assert.Equal(string(plain), smudged.String())
 }
 
 func TestDeterministic(t *testing.T) {
@@ -75,7 +75,7 @@ func TestDeterministic(t *testing.T) {
 	var cleaned2 bytes.Buffer
 	clean(bytes.NewReader(plain), &cleaned2, "")
 
-	assert.Equal(string(cleaned1.Bytes()), string(cleaned2.Bytes()))
+	assert.Equal(cleaned1.String(), cleaned2.String())
 }
 
 func BenchmarkRoundTripPlain(b *testing.B) {
