@@ -29,7 +29,7 @@ var (
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
 	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
 
-	keyNotFound = errors.New("key not found")
+	errKeyNotFound = errors.New("key not found")
 
 	// flags
 	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
@@ -58,7 +58,7 @@ func main() {
 	flag.Parse()
 
 	// Set up keyring file name
-	home := ""
+	var home string
 	u, err := user.Current()
 	if err != nil {
 		// Possibly compiled without CGO and syscall isn't implemented,
@@ -170,7 +170,7 @@ func clean(r io.Reader, w io.Writer, filename string) {
 	}
 	// Check the file is plaintext, if its an encrypted strongbox file, copy as is, and exit 0
 	if bytes.HasPrefix(in, prefix) {
-		_, err := io.Copy(w, bytes.NewReader(in))
+		_, err = io.Copy(w, bytes.NewReader(in))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -202,7 +202,7 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 
 	// file is a non-strongbox file, copy as is and exit
 	if !bytes.HasPrefix(in, prefix) {
-		_, err := io.Copy(w, bytes.NewReader(in))
+		_, err = io.Copy(w, bytes.NewReader(in))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -213,7 +213,7 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	if err != nil {
 		// don't log error if its keyNotFound
 		switch err {
-		case keyNotFound:
+		case errKeyNotFound:
 		default:
 			log.Println(err)
 		}
@@ -413,7 +413,7 @@ func (kr *fileKeyRing) Key(keyID []byte) ([]byte, error) {
 		}
 	}
 
-	return []byte{}, keyNotFound
+	return []byte{}, errKeyNotFound
 }
 
 func (kr *fileKeyRing) Load() error {
@@ -424,10 +424,7 @@ func (kr *fileKeyRing) Load() error {
 	}
 
 	err = yaml.Unmarshal(bytes, kr)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (kr *fileKeyRing) Save() error {
