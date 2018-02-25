@@ -34,10 +34,14 @@ var (
 	// flags
 	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
 	flagGenKey    = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
-	flagClean     = flag.String("clean", "", "intended to be called internally by git")
-	flagSmudge    = flag.String("smudge", "", "intended to be called internally by git")
-	flagDiff      = flag.String("diff", "", "intended to be called internally by git")
-	flagVersion   = flag.Bool("version", false, "Strongbox version")
+	flagDecrypt   = flag.Bool("decrypt", false, "Decrypt single resource")
+	flagKey       = flag.String("key", "", "Private key to use to decrypt")
+
+	flagClean  = flag.String("clean", "", "intended to be called internally by git")
+	flagSmudge = flag.String("smudge", "", "intended to be called internally by git")
+	flagDiff   = flag.String("diff", "", "intended to be called internally by git")
+
+	flagVersion = flag.Bool("version", false, "Strongbox version")
 
 	version = ""
 )
@@ -46,6 +50,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-key key-name\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -key\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -version\n")
 	os.Exit(2)
 }
@@ -78,11 +84,6 @@ func main() {
 		return
 	}
 
-	// only a single flag has been set
-	if flag.NFlag() != 1 {
-		usage()
-	}
-
 	if *flagGitConfig {
 		gitConfig()
 		return
@@ -90,6 +91,14 @@ func main() {
 
 	if *flagGenKey != "" {
 		genKey(*flagGenKey)
+		return
+	}
+
+	if *flagDecrypt {
+		if *flagKey == "" {
+			log.Fatalf("Must provide a key when using -decrypt")
+		}
+		decryptCLI()
 		return
 	}
 
@@ -105,6 +114,29 @@ func main() {
 		diff(*flagDiff)
 		return
 	}
+}
+
+func decryptCLI() {
+	var fn string
+	if flag.Arg(0) == "" {
+		// no file passed, try to read stdin
+		fn = "/dev/stdin"
+	} else {
+		fn = flag.Arg(0)
+	}
+	fb, err := ioutil.ReadFile(fn)
+	if err != nil {
+		log.Fatalf("Unable to read file to decrypt %v", err)
+	}
+	dk, err := decode([]byte(*flagKey))
+	if err != nil {
+		log.Fatalf("Unable to decode private key %v", err)
+	}
+	out, err := decrypt(fb, dk)
+	if err != nil {
+		log.Fatalf("Unable to decrupt %v", err)
+	}
+	fmt.Printf("%s", out)
 }
 
 func gitConfig() {
