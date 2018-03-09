@@ -22,6 +22,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const version = "dev"
+
 var (
 	keyLoader = key
 
@@ -42,8 +44,6 @@ var (
 	flagDiff   = flag.String("diff", "", "intended to be called internally by git")
 
 	flagVersion = flag.Bool("version", false, "Strongbox version")
-
-	version = ""
 )
 
 func usage() {
