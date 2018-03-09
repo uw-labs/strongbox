@@ -3,7 +3,6 @@ builds:
   - ldflags: -s -extldflags "-static" -X "main.version=git-tag:`{{.Env.CIRCLE_TAG}}`, git-sha1=`{{.Env.CIRCLE_SHA1}}`"
     env:
       - CGO_ENABLED=0
-
     goos:
       - windows
       - darwin
@@ -14,11 +13,9 @@ builds:
       - amd64
       - arm
       - arm64
-
 release:
   github:
     owner: uw-labs
     name: strongbox
-
 archive:
-    wrap_in_directory: true
+  wrap_in_directory: true
