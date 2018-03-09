@@ -18,4 +18,4 @@ release:
     owner: uw-labs
     name: strongbox
 archive:
-  wrap_in_directory: true
+  format: binary
