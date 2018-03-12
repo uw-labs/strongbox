@@ -36,10 +36,9 @@ func assertWriteFile(t *testing.T, filename string, data []byte, perm os.FileMod
 	if err != nil {
 		t.Fatal(err)
 	}
-	return
 }
 
-func keyIdFromKR(t *testing.T, name string) (keyId string) {
+func keyIDFromKR(t *testing.T, name string) (keyID string) {
 	kr := make(map[string]interface{})
 	krf, err := ioutil.ReadFile(HOME + "/.strongbox_keyring")
 	if err != nil {
@@ -51,7 +50,7 @@ func keyIdFromKR(t *testing.T, name string) (keyId string) {
 	}
 	kes := kr["keyentries"].([]interface{})
 
-	for k, _ := range kes {
+	for k := range kes {
 		desc := kes[k].(map[interface{}]interface{})["description"].(string)
 		if name == desc {
 			return kes[k].(map[interface{}]interface{})["key-id"].(string)
@@ -97,13 +96,13 @@ func TestMain(m *testing.M) {
 
 func TestSimpleEnc(t *testing.T) {
 	repoDir := HOME + "/test-proj"
-	keyId := keyIdFromKR(t, "test00")
+	keyID := keyIDFromKR(t, "test00")
 	secVal := "secret123wombat"
 
 	ga := `secret filter=strongbox diff=strongbox
 secrets/* filter=strongbox diff=strongbox`
 	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
-	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyId), 0644)
+	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID), 0644)
 	assertWriteFile(t, repoDir+"/secret", []byte(secVal), 0644)
 	assertCommand(t, repoDir, "git", "add", ".")
 	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestSimpleEnc\"")
