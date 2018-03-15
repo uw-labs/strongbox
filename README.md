@@ -49,11 +49,20 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
 ## Verification
 
-You can verify the files have been encrypted in the commit before pushing by
-running `git show HEAD:/path/to/file`
+Following a `git add`, you can verify the file is encrypted in the index:
 
-What you should see is a Strongbox encrypted resource, and this is what would be
-pushed to the remote.
+```
+git show :/path/to/file
+```
+
+Verify a file is encrypted in the commit:
+
+```
+git show HEAD:/path/to/file
+```
+
+What you should see is a Strongbox encrypted resource, and this is what would
+be pushed to the remote.
 
 Compare an entire branch (as it would appear on the remote) to master:
 
