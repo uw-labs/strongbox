@@ -22,7 +22,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const version = "0.1.0-dev"
+const (
+	version = "0.1.0-dev"
+	// Corresponds to the default compression level
+	// gzip.DefaultCompression
+	compressionLevel = 6
+)
 
 var (
 	keyLoader = key
@@ -289,7 +294,7 @@ func encrypt(b []byte, key []byte) ([]byte, error) {
 
 func compress(b []byte) []byte {
 	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
+	zw := gzip.NewWriter(&buf, compressionLevel)
 	_, err := zw.Write(b)
 	if err != nil {
 		log.Fatal(err)
