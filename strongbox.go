@@ -294,7 +294,7 @@ func encrypt(b []byte, key []byte) ([]byte, error) {
 
 func compress(b []byte) []byte {
 	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf, compressionLevel)
+	zw := gzip.NewWriterLevel(&buf, compressionLevel)
 	_, err := zw.Write(b)
 	if err != nil {
 		log.Fatal(err)
