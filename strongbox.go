@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -39,6 +40,7 @@ func main() {
 	app.Version = version
 	app.Usage = ""
 	app.Description = "Encryption for git users."
+	app.EnableBashCompletion = true
 
 	sb := Strongbox{
 		keyring:   &fileKeyRing{fileName: filepath.Join(getHome(), ".strongbox_keyring")},
@@ -47,18 +49,18 @@ func main() {
 
 	app.Commands = []cli.Command{
 		{
-			Name:        "git-config",
-			Description: "Configure git for strongbox use",
-			Action:      sb.commandGitConfig,
+			Name:   "git-config",
+			Usage:  "Configure git for strongbox use",
+			Action: sb.commandGitConfig,
 		},
 		{
-			Name:        "gen-key",
-			Description: "Generate a new key and add it to your strongbox keyring",
-			Action:      sb.commandGenKey,
+			Name:   "gen-key",
+			Usage:  "Generate a new key and add it to your strongbox keyring",
+			Action: sb.commandGenKey,
 		},
 		{
-			Name:        "decrypt",
-			Description: "Decrypt single resource",
+			Name:  "decrypt",
+			Usage: "Decrypt single resource",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "key",
@@ -69,28 +71,39 @@ func main() {
 		},
 
 		{
-			Name:        "clean",
-			Description: "intended to be called internally by git",
-			Action:      sb.commandClean,
+			Name:   "clean",
+			Usage:  "intended to be called internally by git",
+			Action: sb.commandClean,
 		},
 		{
-			Name:        "smudge",
-			Description: "intended to be called internally by git",
-			Action:      sb.commandSmudge,
+			Name:   "smudge",
+			Usage:  "intended to be called internally by git",
+			Action: sb.commandSmudge,
 		},
 		{
-			Name:        "diff",
-			Description: "intended to be called internally by git",
-			Action:      sb.commandDiff,
+			Name:   "diff",
+			Usage:  "intended to be called internally by git",
+			Action: sb.commandDiff,
 		},
 
 		{
-			Name:        "version",
-			Description: "Print the application version and exit",
+			Name:  "version",
+			Usage: "Print the application version and exit",
 			Action: func(c *cli.Context) (err error) {
 				fmt.Println(version)
 				return
 			},
+		},
+		{
+			Name: "completion",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "flavour",
+					Usage: "shell flavour: bash or zsh",
+					Value: "bash",
+				},
+			},
+			Action: commandCompletion,
 		},
 	}
 
@@ -189,6 +202,37 @@ func (sb *Strongbox) commandSmudge(c *cli.Context) (err error) {
 
 func (sb *Strongbox) commandDiff(c *cli.Context) (err error) {
 	return diff(c.Args().First())
+}
+
+func commandCompletion(c *cli.Context) (err error) {
+	var flavour = c.String("flavour")
+
+	resp, err := http.Get(fmt.Sprintf("https://raw.githubusercontent.com/urfave/cli/master/autocomplete/%s_autocomplete", flavour))
+	if err != nil {
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		return errors.Errorf("failed to get bash completion: %s", resp.Status)
+	}
+
+	contents, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	completionFile := filepath.Join(getHome(), ".strongbox_autocomplete.sh")
+
+	err = ioutil.WriteFile(completionFile, contents, 0700)
+	if err != nil {
+		return
+	}
+
+	log.Println("Successfully written", flavour, "completion to", completionFile)
+	log.Println("To enable, add the following line to your .bashrc file (or equivalent)")
+	log.Println("PROG=strongbox source", completionFile)
+
+	return
 }
 
 func getHome() (home string) {
