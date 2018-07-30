@@ -6,8 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -19,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/jacobsa/crypto/siv"
+	"github.com/pkg/errors"
+	"github.com/urfave/cli"
 	"gopkg.in/yaml.v2"
 )
 
@@ -32,36 +32,18 @@ var (
 	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
 
 	errKeyNotFound = errors.New("key not found")
-
-	// flags
-	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
-	flagGenKey    = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
-	flagDecrypt   = flag.Bool("decrypt", false, "Decrypt single resource")
-	flagKey       = flag.String("key", "", "Private key to use to decrypt")
-
-	flagClean  = flag.String("clean", "", "intended to be called internally by git")
-	flagSmudge = flag.String("smudge", "", "intended to be called internally by git")
-	flagDiff   = flag.String("diff", "", "intended to be called internally by git")
-
-	flagVersion = flag.Bool("version", false, "Strongbox version")
 )
-
-func usage() {
-	fmt.Fprintf(os.Stderr, "Usage:\n\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-key key-name\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -key\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -version\n")
-	os.Exit(2)
-}
 
 func main() {
 	log.SetPrefix("strongbox: ")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	flag.Usage = usage
-	flag.Parse()
+	app := cli.NewApp()
+
+	app.Name = "strongbox"
+	app.Version = version
+	app.Usage = ""
+	app.Description = "Encryption for git users."
 
 	// Set up keyring file name
 	var home string
@@ -79,164 +61,197 @@ func main() {
 
 	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
 
-	if *flagVersion || (flag.NArg() == 1 && flag.Arg(0) == "version") {
-		fmt.Println(version)
-		return
+	app.Commands = []cli.Command{
+		{
+			Name:        "git-config",
+			Description: "Configure git for strongbox use",
+			Action:      commandGitConfig,
+		},
+		{
+			Name:        "gen-key",
+			Description: "Generate a new key and add it to your strongbox keyring",
+			Action:      commandGenKey,
+		},
+		{
+			Name:        "decrypt",
+			Description: "Decrypt single resource",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "key",
+					Usage: "Private key",
+				},
+			},
+			Action: commandDecrypt,
+		},
+
+		{
+			Name:        "clean",
+			Description: "intended to be called internally by git",
+			Action:      commandClean,
+		},
+		{
+			Name:        "smudge",
+			Description: "intended to be called internally by git",
+			Action:      commandSmudge,
+		},
+		{
+			Name:        "diff",
+			Description: "intended to be called internally by git",
+			Action:      commandDiff,
+		},
+
+		{
+			Name:        "version",
+			Description: "Print the application version and exit",
+			Action: func(c *cli.Context) (err error) {
+				fmt.Println(version)
+				return
+			},
+		},
 	}
 
-	if *flagGitConfig {
-		gitConfig()
-		return
-	}
-
-	if *flagGenKey != "" {
-		genKey(*flagGenKey)
-		return
-	}
-
-	if *flagDecrypt {
-		if *flagKey == "" {
-			log.Fatalf("Must provide a key when using -decrypt")
-		}
-		decryptCLI()
-		return
-	}
-
-	if *flagClean != "" {
-		clean(os.Stdin, os.Stdout, *flagClean)
-		return
-	}
-	if *flagSmudge != "" {
-		smudge(os.Stdin, os.Stdout, *flagSmudge)
-		return
-	}
-	if *flagDiff != "" {
-		diff(*flagDiff)
-		return
+	err = app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
-func decryptCLI() {
-	var fn string
-	if flag.Arg(0) == "" {
-		// no file passed, try to read stdin
-		fn = "/dev/stdin"
-	} else {
-		fn = flag.Arg(0)
-	}
-	fb, err := ioutil.ReadFile(fn)
-	if err != nil {
-		log.Fatalf("Unable to read file to decrypt %v", err)
-	}
-	dk, err := decode([]byte(*flagKey))
-	if err != nil {
-		log.Fatalf("Unable to decode private key %v", err)
-	}
-	out, err := decrypt(fb, dk)
-	if err != nil {
-		log.Fatalf("Unable to decrupt %v", err)
-	}
-	fmt.Printf("%s", out)
-}
-
-func gitConfig() {
+func commandGitConfig(c *cli.Context) (err error) {
 	args := [][]string{
-		{"config", "--global", "--replace-all", "filter.strongbox.clean", "strongbox -clean %f"},
-		{"config", "--global", "--replace-all", "filter.strongbox.smudge", "strongbox -smudge %f"},
+		{"config", "--global", "--replace-all", "filter.strongbox.clean", "strongbox clean %f"},
+		{"config", "--global", "--replace-all", "filter.strongbox.smudge", "strongbox smudge %f"},
 		{"config", "--global", "--replace-all", "filter.strongbox.required", "true"},
 
-		{"config", "--global", "--replace-all", "diff.strongbox.textconv", "strongbox -diff"},
+		{"config", "--global", "--replace-all", "diff.strongbox.textconv", "strongbox diff"},
 	}
 	for _, command := range args {
 		cmd := exec.Command("git", command...)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			log.Fatal(string(out))
+			return errors.New(string(out))
 		}
 	}
 	log.Println("git global configuration updated successfully")
+
+	return
 }
 
-func genKey(desc string) {
-	err := kr.Load()
+func commandDecrypt(c *cli.Context) (err error) {
+	if !c.IsSet("key") {
+		return errors.New("decrypt requires --key to be set")
+	}
+	key := c.String("key")
+
+	var input io.Reader
+	if c.Args().First() == "" {
+		// no file passed, try to read stdin
+		input = os.Stdin
+	} else {
+		input, err = os.Open(c.Args().First())
+		if err != nil {
+			return errors.Wrap(err, "failed to open input file")
+		}
+	}
+
+	contents, err := ioutil.ReadAll(input)
+	if err != nil {
+		return errors.Wrap(err, "failed to read input stream")
+	}
+
+	dk, err := decode([]byte(key))
+	if err != nil {
+		return errors.Wrap(err, "failed to decode private key")
+	}
+
+	out, err := decrypt(contents, dk)
+	if err != nil {
+		return errors.Wrap(err, "failed to decrypt")
+	}
+
+	fmt.Printf("%s", out)
+	return
+}
+
+func commandGenKey(c *cli.Context) (err error) {
+	err = kr.Load()
 	if err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
+		return
 	}
 
 	key := make([]byte, 32)
 	_, err = rand.Read(key)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
 
 	keyID := sha256.Sum256(key)
 
-	kr.AddKey(desc, keyID[:], key)
+	kr.AddKey(c.Args().First(), keyID[:], key)
 
 	err = kr.Save()
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
+
+	return
 }
 
-func diff(filename string) {
-	f, err := os.Open(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		if err = f.Close(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-	_, err = io.Copy(os.Stdout, f)
-	if err != nil {
-		log.Fatal(err)
-	}
+func commandClean(c *cli.Context) (err error) {
+	return clean(os.Stdin, os.Stdout, c.Args().First())
 }
 
-func clean(r io.Reader, w io.Writer, filename string) {
-	// Read the file, fail on error
+func commandSmudge(c *cli.Context) (err error) {
+	return smudge(os.Stdin, os.Stdout, c.Args().First())
+}
+
+func commandDiff(c *cli.Context) (err error) {
+	return diff(c.Args().First())
+}
+
+func clean(r io.Reader, w io.Writer, filename string) (err error) {
 	in, err := ioutil.ReadAll(r)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
+
 	// Check the file is plaintext, if its an encrypted strongbox file, copy as is, and exit 0
 	if bytes.HasPrefix(in, prefix) {
 		_, err = io.Copy(w, bytes.NewReader(in))
 		if err != nil {
-			log.Fatal(err)
+			return
 		}
 		return
 	}
+
 	// File is plaintext and needs to be encrypted, get the key, fail on error
 	key, err := keyLoader(filename)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
-	// encrypt the file, fail on error
+
 	out, err := encrypt(in, key)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
-	// write out encrypted file, fail on error
+
 	_, err = io.Copy(w, bytes.NewReader(out))
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
+
+	return
 }
 
-// Called by git on `git checkout`
-func smudge(r io.Reader, w io.Writer, filename string) {
+func smudge(r io.Reader, w io.Writer, filename string) (err error) {
 	in, err := ioutil.ReadAll(r)
 	if err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "failed to read input stream")
 	}
 
 	// file is a non-strongbox file, copy as is and exit
 	if !bytes.HasPrefix(in, prefix) {
 		_, err = io.Copy(w, bytes.NewReader(in))
 		if err != nil {
-			log.Fatal(err)
+			return errors.Wrap(err, "failed to copy to output stream")
 		}
 		return
 	}
@@ -261,9 +276,30 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 		log.Println(err)
 		out = in
 	}
-	if _, err := io.Copy(w, bytes.NewReader(out)); err != nil {
-		log.Println(err)
+	if _, err = io.Copy(w, bytes.NewReader(out)); err != nil {
+		return
 	}
+
+	return
+}
+
+func diff(filename string) (err error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err = f.Close(); err != nil {
+			return
+		}
+	}()
+
+	_, err = io.Copy(os.Stdout, f)
+	if err != nil {
+		return
+	}
+
+	return
 }
 
 func encrypt(b []byte, key []byte) ([]byte, error) {
