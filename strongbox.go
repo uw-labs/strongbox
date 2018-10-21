@@ -65,16 +65,19 @@ func main() {
 
 	// Set up keyring file name
 	var home string
-	u, err := user.Current()
-	if err != nil {
-		// Possibly compiled without CGO and syscall isn't implemented,
-		// try to grab the environment variable
-		home = os.Getenv("HOME")
-		if home == "" {
-			log.Fatal("Could not call os/user.Current() or find $HOME. Please recompile with CGO enabled or set $HOME")
+	home = os.Getenv("STRONGBOX_HOME")
+	if home == "" {
+		u, err := user.Current()
+		if err != nil {
+			// Possibly compiled without CGO and syscall isn't implemented,
+			// try to grab the environment variable
+			home = os.Getenv("HOME")
+			if home == "" {
+				log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
+			}
+		} else {
+			home = u.HomeDir
 		}
-	} else {
-		home = u.HomeDir
 	}
 
 	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
