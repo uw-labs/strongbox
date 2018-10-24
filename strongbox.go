@@ -67,12 +67,14 @@ func main() {
 	var home string
 	home = os.Getenv("STRONGBOX_HOME")
 	if home == "" {
-		home = os.Getenv("HOME")
-	}
-	if home == "" {
 		u, err := user.Current()
 		if err != nil {
-			log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set environmental variables")
+			// Possibly compiled without CGO and syscall isn't implemented,
+			// try to grab the environment variable
+			home = os.Getenv("HOME")
+			if home == "" {
+				log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
+			}
 		} else {
 			home = u.HomeDir
 		}
