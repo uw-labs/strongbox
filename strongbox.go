@@ -64,21 +64,7 @@ func main() {
 	flag.Parse()
 
 	// Set up keyring file name
-	var home string
-	home = os.Getenv("STRONGBOX_HOME")
-	if home == "" {
-		u, err := user.Current()
-		if err != nil {
-			// Possibly compiled without CGO and syscall isn't implemented,
-			// try to grab the environment variable
-			home = os.Getenv("HOME")
-			if home == "" {
-				log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
-			}
-		} else {
-			home = u.HomeDir
-		}
-	}
+	home := deriveHome()
 
 	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
 
@@ -117,6 +103,26 @@ func main() {
 		diff(*flagDiff)
 		return
 	}
+}
+
+func deriveHome() string {
+	// try explicitly set STRONGBOX_HOME
+	if home := os.Getenv("STRONGBOX_HOME"); home != "" {
+		return home
+	}
+	// Try user.Current which works in most cases, but may not work with CGO disabled.
+	u, err := user.Current()
+	if err == nil && u.HomeDir != "" {
+		return u.HomeDir
+	}
+	// try HOME env var
+	if home := os.Getenv("HOME"); home != "" {
+		return home
+	}
+
+	log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
+	// not reached
+	return ""
 }
 
 func decryptCLI() {
