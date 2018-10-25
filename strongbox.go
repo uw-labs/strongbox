@@ -121,6 +121,8 @@ func deriveHome() string {
 	}
 
 	log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
+	// not reached
+	return ""
 }
 
 func decryptCLI() {
