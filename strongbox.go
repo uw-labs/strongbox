@@ -474,5 +474,14 @@ func (kr *fileKeyRing) Save() error {
 		log.Fatal(err)
 	}
 
+	path := filepath.Dir(kr.fileName)
+	_, err = os.Stat(path)
+	if os.IsNotExist(err) {
+		err := os.MkdirAll(path, 0700)
+		if err != nil {
+			return fmt.Errorf("Error creating strongbox home folder: %s\n", err)
+		}
+	}
+
 	return ioutil.WriteFile(kr.fileName, ser, 0600)
 }
