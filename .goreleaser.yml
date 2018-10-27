@@ -1,7 +1,6 @@
 # Build customization
 builds:
-  - ldflags: -s -extldflags "-static"
-    env:
+  - env:
       - CGO_ENABLED=0
     goos:
       - windows
