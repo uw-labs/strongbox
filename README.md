@@ -37,7 +37,9 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
    ```
    strongbox -gen-key my-key
    ```
-   This will add a new key to `$HOME/.strongbox_keyring`
+   This will add a new key to your `.strongbox_keyring`. By default, the
+   keyring is created in the `$HOME` directory, but this location can be changed
+   by setting the `$STRONGBOX_HOME` environmental variable.
 
 4. Include a `.strongbox-keyid` file in your repository containing public key
    you want to use (typically by copying a public key from
