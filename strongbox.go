@@ -143,7 +143,7 @@ func decryptCLI() {
 	}
 	out, err := decrypt(fb, dk)
 	if err != nil {
-		log.Fatalf("Unable to decrupt %v", err)
+		log.Fatalf("Unable to decrypt %v", err)
 	}
 	fmt.Printf("%s", out)
 }
