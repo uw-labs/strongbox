@@ -12,8 +12,10 @@ jobs:
   release:
     docker:
       - image: circleci/golang:1.12
+    working_directory: /go/src/github.com/uw-labs/strongbox
     steps:
       - checkout
+      - run: go get
       - run: curl -sL https://git.io/goreleaser | bash
 workflows:
   version: 2
