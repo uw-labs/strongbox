@@ -22,7 +22,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const version = "0.1.0-dev"
+const version = "v0.1.0"
 
 var (
 	keyLoader = key
