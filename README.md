@@ -27,11 +27,11 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
 2. In each repository you want to use strongbox, create `.gitattributes` file
    containing the patterns to be managed by strongbox.
 
-    For example:
+   For example:
 
-    ```
-    secrets/* filter=strongbox diff=strongbox
-    ```
+   ```
+   secrets/* filter=strongbox diff=strongbox
+   ```
 
 3. Generate a key to use for the encryption, for example:
    ```
@@ -48,6 +48,22 @@ Or you can obtain a binary from https://github.com/uw-labs/strongbox/releases
    `.strongbox-keyid` for a given resource, strongbox will recurse up the
    directory structure until it finds the file.  This allows using different
    keys for different subdirectories within a repository.
+
+## Existing project
+
+Strongbox uses [clean and smudge
+filters](https://git-scm.com/book/en/v2/Customizing-Git-Git-Attributes#filters_a)
+to encrypt and decrypt files.
+
+If you are cloning a project that uses strongbox, you will need to place the
+key into your keyring file prior to cloning (checkout). Otherwise that filter
+will fail and not decrypt files on checkout.
+
+If you already have the project locally and added the keys, you can remove and
+checkout the files to force the filter:
+```
+rm <files> && git checkout -- <files>
+```
 
 ## Verification
 
