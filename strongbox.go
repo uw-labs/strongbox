@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jacobsa/crypto/siv"
@@ -29,7 +30,11 @@ var (
 
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
+	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n# key-id: %s\n"
+
+	// Match lines *not* starting with `#`
+	// this should match ciphertext without the strongbox prefix
+	prefixStripRegex = regexp.MustCompile(`(?m)^[^#]+$`)
 
 	errKeyNotFound = errors.New("key not found")
 
@@ -282,7 +287,9 @@ func encrypt(b []byte, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	var buf []byte
-	buf = append(buf, defaultPrefix...)
+	keyID := sha256.Sum256(key)
+	prefix := fmt.Sprintf(defaultPrefix, string(encode(keyID[:])))
+	buf = append(buf, prefix...)
 	b64 := encode(out)
 	for len(b64) > 0 {
 		l := 76
@@ -340,13 +347,12 @@ func decode(encoded []byte) ([]byte, error) {
 }
 
 func decrypt(enc []byte, priv []byte) ([]byte, error) {
-	// strip prefix and any comment up to end of line
-	spl := bytes.SplitN(enc, []byte("\n"), 2)
-	if len(spl) != 2 {
-		return nil, errors.New("Couldn't split on end of line")
+	// strip the prefix (both single line v0.1 and multiline v0.2)
+	ciphertext := prefixStripRegex.Find(enc)
+	if ciphertext == nil {
+		return nil, errors.New("Couldn't split strongbox prefix and ciphertext")
 	}
-	b64encoded := spl[1]
-	b64decoded, err := decode(b64encoded)
+	b64decoded, err := decode(ciphertext)
 	if err != nil {
 		return nil, err
 	}
