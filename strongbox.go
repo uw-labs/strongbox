@@ -30,7 +30,7 @@ var (
 
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n# key-id: %s\n"
+	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox ; key-id:%s\n"
 
 	// Match lines *not* starting with `#`
 	// this should match ciphertext without the strongbox prefix
