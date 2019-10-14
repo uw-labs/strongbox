@@ -30,7 +30,7 @@ var (
 
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox ; key-id:%s\n"
+	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
 
 	// Match lines *not* starting with `#`
 	// this should match ciphertext without the strongbox prefix
@@ -287,9 +287,7 @@ func encrypt(b []byte, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	var buf []byte
-	keyID := sha256.Sum256(key)
-	prefix := fmt.Sprintf(defaultPrefix, string(encode(keyID[:])))
-	buf = append(buf, prefix...)
+	buf = append(buf, defaultPrefix...)
 	b64 := encode(out)
 	for len(b64) > 0 {
 		l := 76
