@@ -20,6 +20,7 @@ func command(dir, name string, arg ...string) (out []byte, err error) {
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = dir
 	out, err = cmd.CombinedOutput()
+	fmt.Println(string(out))
 	return
 }
 
@@ -106,7 +107,7 @@ secrets/* filter=strongbox diff=strongbox`
 	assertWriteFile(t, repoDir+"/secret", []byte(secVal), 0644)
 	assertCommand(t, repoDir, "git", "add", ".")
 	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestSimpleEnc\"")
-	ptOut, _ := command(repoDir, "git", "show")
+	ptOut, _ := command(repoDir, "git", "show", "--", "secret")
 	encOut, _ := command(repoDir, "git", "show", "HEAD:secret")
 
 	assert.Contains(t, string(ptOut), secVal, "no plaintext")
