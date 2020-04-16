@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"testing"
 
@@ -10,25 +12,47 @@ import (
 )
 
 var (
-	priv  []byte
-	plain = []byte("hello world. this is some plain text for testing")
+	priv, pub []byte
+	plain     = []byte("hello world. this is some plain text for testing")
 )
+
+type mockKeyRing struct{}
+
+func (m *mockKeyRing) Load() error {
+	return nil
+}
+
+func (m *mockKeyRing) Save() error {
+	return nil
+}
+
+func (m *mockKeyRing) AddKey(name string, keyID []byte, key []byte) {
+}
+
+func (m *mockKeyRing) Key(keyID []byte) ([]byte, error) {
+	return priv, nil
+}
 
 func TestMain(m *testing.M) {
 	var err error
+
 	priv = make([]byte, 32)
 	_, err = rand.Read(priv)
 	if err != nil {
 		panic(err)
 	}
 
+	keyId := sha256.Sum256(priv)
+	pub = keyId[:]
+
 	keyLoader = testKeyLoader
+	kr = &mockKeyRing{}
 
 	os.Exit(m.Run())
 }
 
-func testKeyLoader(string) ([]byte, error) {
-	return priv, nil
+func testKeyLoader(string) ([]byte, []byte, error) {
+	return pub, priv, nil
 }
 
 func TestMultipleClean(t *testing.T) {
@@ -57,6 +81,8 @@ func TestRoundTrip(t *testing.T) {
 
 	var cleaned bytes.Buffer
 	clean(bytes.NewReader(plain), &cleaned, "")
+
+	fmt.Printf("%s", string(cleaned.String()))
 
 	assert.NotEqual(plain, cleaned.Bytes())
 

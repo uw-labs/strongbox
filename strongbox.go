@@ -16,22 +16,29 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jacobsa/crypto/siv"
-	"gopkg.in/yaml.v2"
 )
 
 const version = "v0.2.0-dev"
 
 var (
-	keyLoader = key
+	keyLoader       = keyPair
+	kr              keyRing
+	prefix          = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
+	v1DefaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
+	v2DefaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n# key-id: %s\n# version: %s\n"
 
-	kr            keyRing
-	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
+	// Match lines *not* starting with `#`
+	// this should match ciphertext without the strongbox prefix
+	prefixStripRegex = regexp.MustCompile(`(?m)^[^#]+$`)
 
-	errKeyNotFound = errors.New("key not found")
+	keyIdRegex = regexp.MustCompile(`key-id: (\w+)`)
+
+	errKeyNotFound            = errors.New("key not found")
+	errKeyIdMissingFromHeader = errors.New("strongbox header doesn't contain key-id")
 
 	// flags
 	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
@@ -218,12 +225,12 @@ func clean(r io.Reader, w io.Writer, filename string) {
 		return
 	}
 	// File is plaintext and needs to be encrypted, get the key, fail on error
-	key, err := keyLoader(filename)
+	keyId, key, err := keyLoader(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// encrypt the file, fail on error
-	out, err := encrypt(in, key)
+	out, err := encrypt(in, key, keyId)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -250,19 +257,25 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 		return
 	}
 
-	key, err := keyLoader(filename)
+	// try to get the key using the header, failing that, try to get the
+	// key using the filename
+	var key []byte
+	key, err = keyFromHeader(in)
 	if err != nil {
-		// don't log error if its keyNotFound
-		switch err {
-		case errKeyNotFound:
-		default:
-			log.Println(err)
+		_, key, err = keyLoader(filename)
+		if err != nil {
+			// don't log error if its keyNotFound
+			switch err {
+			case errKeyNotFound:
+			default:
+				log.Println(err)
+			}
+			// Couldn't load the key, just copy as is and return
+			if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
+				log.Println(err)
+			}
+			return
 		}
-		// Couldn't load the key, just copy as is and return
-		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
-			log.Println(err)
-		}
-		return
 	}
 
 	out, err := decrypt(in, key)
@@ -275,14 +288,39 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	}
 }
 
-func encrypt(b []byte, key []byte) ([]byte, error) {
+// keyFromHeader looks through the file content, trying to get key-id value,
+// and look up the key in the keyring
+func keyFromHeader(in []byte) ([]byte, error) {
+	match := keyIdRegex.FindStringSubmatch(string(in))
+	if len(match) != 2 {
+		return []byte{}, errKeyIdMissingFromHeader
+	}
+	decodedKeyId, _ := decode([]byte(match[1]))
+	key, err := kr.Key(decodedKeyId)
+	//log.Printf("DEBUG: found key %s %e", encode(key), err)
+	if err != nil {
+		return []byte{}, err
+	}
+	return key, nil
+}
+
+func encrypt(b []byte, key, keyId []byte) ([]byte, error) {
 	b = compress(b)
 	out, err := siv.Encrypt(nil, key, b, nil)
 	if err != nil {
 		return nil, err
 	}
 	var buf []byte
-	buf = append(buf, defaultPrefix...)
+	// decorate with v0.1 prefix
+	buf = append(buf, v1DefaultPrefix...)
+
+	// decoreate with v0.2 prefix
+	// args:
+	//   base64 keyId
+	//   version string
+	//v2p := fmt.Sprintf(v2DefaultPrefix, encode(keyId), version)
+	//buf = append(buf, []byte(v2p)...)
+
 	b64 := encode(out)
 	for len(b64) > 0 {
 		l := 76
@@ -340,13 +378,12 @@ func decode(encoded []byte) ([]byte, error) {
 }
 
 func decrypt(enc []byte, priv []byte) ([]byte, error) {
-	// strip prefix and any comment up to end of line
-	spl := bytes.SplitN(enc, []byte("\n"), 2)
-	if len(spl) != 2 {
-		return nil, errors.New("Couldn't split on end of line")
+	// strip the prefix (both single line v0.1 and multiline v0.2)
+	ciphertext := prefixStripRegex.Find(enc)
+	if ciphertext == nil {
+		return nil, errors.New("Couldn't split strongbox prefix and ciphertext")
 	}
-	b64encoded := spl[1]
-	b64decoded, err := decode(b64encoded)
+	b64decoded, err := decode(ciphertext)
 	if err != nil {
 		return nil, err
 	}
@@ -358,23 +395,24 @@ func decrypt(enc []byte, priv []byte) ([]byte, error) {
 	return decrypted, nil
 }
 
-func key(filename string) ([]byte, error) {
+// keyPair returns public, private and error
+func keyPair(filename string) ([]byte, []byte, error) {
 	keyID, err := findKey(filename)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, []byte{}, err
 	}
 
 	err = kr.Load()
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, []byte{}, err
 	}
 
 	key, err := kr.Key(keyID)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, []byte{}, err
 	}
 
-	return key, nil
+	return keyID, key, nil
 }
 
 func findKey(filename string) ([]byte, error) {
@@ -409,79 +447,4 @@ func readKey(filename string) ([]byte, error) {
 		return []byte{}, fmt.Errorf("unexpected key length %d", len(b))
 	}
 	return b, nil
-}
-
-type keyRing interface {
-	Load() error
-	Save() error
-	AddKey(name string, keyID []byte, key []byte)
-	Key(keyID []byte) ([]byte, error)
-}
-
-type fileKeyRing struct {
-	fileName   string
-	KeyEntries []keyEntry
-}
-
-type keyEntry struct {
-	Description string `yaml:"description"`
-	KeyID       string `yaml:"key-id"`
-	Key         string `yaml:"key"`
-}
-
-func (kr *fileKeyRing) AddKey(desc string, keyID []byte, key []byte) {
-	kr.KeyEntries = append(kr.KeyEntries, keyEntry{
-		Description: desc,
-		KeyID:       string(encode(keyID[:])),
-		Key:         string(encode(key[:])),
-	})
-
-}
-
-func (kr *fileKeyRing) Key(keyID []byte) ([]byte, error) {
-	b64 := string(encode(keyID[:]))
-
-	for _, ke := range kr.KeyEntries {
-		if ke.KeyID == b64 {
-			dec, err := decode([]byte(ke.Key))
-			if err != nil {
-				return []byte{}, err
-			}
-			if len(dec) != 32 {
-				return []byte{}, fmt.Errorf("unexpected length of key: %d", len(dec))
-			}
-			return dec, nil
-		}
-	}
-
-	return []byte{}, errKeyNotFound
-}
-
-func (kr *fileKeyRing) Load() error {
-
-	bytes, err := ioutil.ReadFile(kr.fileName)
-	if err != nil {
-		return err
-	}
-
-	err = yaml.Unmarshal(bytes, kr)
-	return err
-}
-
-func (kr *fileKeyRing) Save() error {
-	ser, err := yaml.Marshal(kr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	path := filepath.Dir(kr.fileName)
-	_, err = os.Stat(path)
-	if os.IsNotExist(err) {
-		err := os.MkdirAll(path, 0700)
-		if err != nil {
-			return fmt.Errorf("error creating strongbox home folder: %s", err)
-		}
-	}
-
-	return ioutil.WriteFile(kr.fileName, ser, 0600)
 }
