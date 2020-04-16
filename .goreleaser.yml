@@ -1,6 +1,7 @@
 # Build customization
 builds:
-  - env:
+  - id: main
+    env:
       - CGO_ENABLED=0
     goos:
       - windows
@@ -16,5 +17,9 @@ release:
   github:
     owner: uw-labs
     name: strongbox
-archive:
-  format: binary
+archives:
+  - builds:
+      - main
+    format: binary
+    files:
+      - none*
