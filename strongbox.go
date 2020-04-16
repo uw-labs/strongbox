@@ -22,7 +22,7 @@ import (
 	"github.com/jacobsa/crypto/siv"
 )
 
-const version = "v0.2.0-rc2"
+const version = "v0.2.0-dev"
 
 var (
 	keyLoader       = keyPair
