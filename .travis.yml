@@ -4,6 +4,10 @@ language: go
 go:
   - "1.15.x"
 
+env:
+  global:
+    - CGO_ENABLED=0
+
 # needed only if you use the docker pipe
 services:
   - docker
