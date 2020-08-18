@@ -42,8 +42,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	keyId := sha256.Sum256(priv)
-	pub = keyId[:]
+	keyID := sha256.Sum256(priv)
+	pub = keyID[:]
 
 	keyLoader = testKeyLoader
 	kr = &mockKeyRing{}

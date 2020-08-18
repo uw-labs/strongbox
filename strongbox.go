@@ -35,10 +35,10 @@ var (
 	// this should match ciphertext without the strongbox prefix
 	prefixStripRegex = regexp.MustCompile(`(?m)^[^#]+$`)
 
-	keyIdRegex = regexp.MustCompile(`key-id: (\w+)`)
+	keyIDRegex = regexp.MustCompile(`key-id: (\w+)`)
 
 	errKeyNotFound            = errors.New("key not found")
-	errKeyIdMissingFromHeader = errors.New("strongbox header doesn't contain key-id")
+	errKeyIDMissingFromHeader = errors.New("strongbox header doesn't contain key-id")
 
 	// flags
 	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
@@ -225,12 +225,12 @@ func clean(r io.Reader, w io.Writer, filename string) {
 		return
 	}
 	// File is plaintext and needs to be encrypted, get the key, fail on error
-	keyId, key, err := keyLoader(filename)
+	keyID, key, err := keyLoader(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// encrypt the file, fail on error
-	out, err := encrypt(in, key, keyId)
+	out, err := encrypt(in, key, keyID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -291,12 +291,12 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 // keyFromHeader looks through the file content, trying to get key-id value,
 // and look up the key in the keyring
 func keyFromHeader(in []byte) ([]byte, error) {
-	match := keyIdRegex.FindStringSubmatch(string(in))
+	match := keyIDRegex.FindStringSubmatch(string(in))
 	if len(match) != 2 {
-		return []byte{}, errKeyIdMissingFromHeader
+		return []byte{}, errKeyIDMissingFromHeader
 	}
-	decodedKeyId, _ := decode([]byte(match[1]))
-	key, err := kr.Key(decodedKeyId)
+	decodedKeyID, _ := decode([]byte(match[1]))
+	key, err := kr.Key(decodedKeyID)
 	//log.Printf("DEBUG: found key %s %e", encode(key), err)
 	if err != nil {
 		return []byte{}, err
@@ -304,7 +304,7 @@ func keyFromHeader(in []byte) ([]byte, error) {
 	return key, nil
 }
 
-func encrypt(b []byte, key, keyId []byte) ([]byte, error) {
+func encrypt(b []byte, key, keyID []byte) ([]byte, error) {
 	b = compress(b)
 	out, err := siv.Encrypt(nil, key, b, nil)
 	if err != nil {
