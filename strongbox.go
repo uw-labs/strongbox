@@ -311,15 +311,12 @@ func encrypt(b []byte, key, keyID []byte) ([]byte, error) {
 		return nil, err
 	}
 	var buf []byte
-	// decorate with v0.1 prefix
-	buf = append(buf, v1DefaultPrefix...)
-
 	// decoreate with v0.2 prefix
 	// args:
 	//   base64 keyId
 	//   version string
-	//v2p := fmt.Sprintf(v2DefaultPrefix, encode(keyId), version)
-	//buf = append(buf, []byte(v2p)...)
+	v2p := fmt.Sprintf(v2DefaultPrefix, encode(keyID), version)
+	buf = append(buf, []byte(v2p)...)
 
 	b64 := encode(out)
 	for len(b64) > 0 {

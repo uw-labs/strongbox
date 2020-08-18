@@ -1,8 +1,8 @@
-FROM alpine:3.11
+FROM golang:1.15-alpine
 
-RUN apk --no-cache add git go musl-dev
+RUN apk --no-cache add git
 
-ENV GOPATH /go
+ENV GOPATH=/go CGO_ENABLED=0
 COPY . /go/src/github.com/uw-labs/strongbox
 WORKDIR /go/src/github.com/uw-labs/strongbox
 
