@@ -1,6 +1,5 @@
 #!/bin/sh
 
-CGO_ENABLED=0
 PATH=$PATH:$GOPATH/bin
 
 go get -t .
