@@ -93,7 +93,7 @@ git diff-index -p master
 
 ### Empty diff due to header metadata
 
-Version 0.3.0 adds key-id metadata to the header. Modifying the header but not
+Version 0.3.1 adds key-id metadata to the header. Modifying the header but not
 the plain-text will result in "empty diff". You can see the changes to the
 header only using this command: `git diff-index HEAD -p`
 
