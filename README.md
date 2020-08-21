@@ -91,6 +91,12 @@ Compare an entire branch (as it would appear on the remote) to master:
 git diff-index -p master
 ```
 
+### Empty diff due to header metadata
+
+Version 0.3.1 adds key-id metadata to the header. Modifying the header but not
+the plain-text will result in "empty diff". You can see the changes to the
+header only using this command: `git diff-index HEAD -p`
+
 ## Key rotation
 
 To rotate keys, update the `.strongbox-keyid` with the new key id, then `touch`

@@ -25,11 +25,10 @@ import (
 const version = "v0.4.0-dev"
 
 var (
-	keyLoader       = keyPair
-	kr              keyRing
-	prefix          = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	v1DefaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
-	v2DefaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n# key-id: %s\n# version: %s\n"
+	keyLoader     = keyPair
+	kr            keyRing
+	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
+	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n# key-id: %s\n"
 
 	// Match lines *not* starting with `#`
 	// this should match ciphertext without the strongbox prefix
@@ -311,12 +310,8 @@ func encrypt(b []byte, key, keyID []byte) ([]byte, error) {
 		return nil, err
 	}
 	var buf []byte
-	// decoreate with v0.2 prefix
-	// args:
-	//   base64 keyId
-	//   version string
-	v2p := fmt.Sprintf(v2DefaultPrefix, encode(keyID), version)
-	buf = append(buf, []byte(v2p)...)
+	p := fmt.Sprintf(defaultPrefix, encode(keyID))
+	buf = append(buf, []byte(p)...)
 
 	b64 := encode(out)
 	for len(b64) > 0 {
