@@ -28,7 +28,7 @@ var (
 	keyLoader     = keyPair
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = "# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n# key-id: %s\n"
+	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
 
 	// Match lines *not* starting with `#`
 	// this should match ciphertext without the strongbox prefix
@@ -91,7 +91,7 @@ func main() {
 
 	if *flagDecrypt {
 		if *flagKey == "" {
-			log.Fatalf("Must provide a key when using -decrypt")
+			log.Fatalf("Must provide a `-key` when using -decrypt")
 		}
 		decryptCLI()
 		return
@@ -310,9 +310,7 @@ func encrypt(b []byte, key, keyID []byte) ([]byte, error) {
 		return nil, err
 	}
 	var buf []byte
-	p := fmt.Sprintf(defaultPrefix, encode(keyID))
-	buf = append(buf, []byte(p)...)
-
+	buf = append(buf, defaultPrefix...)
 	b64 := encode(out)
 	for len(b64) > 0 {
 		l := 76
