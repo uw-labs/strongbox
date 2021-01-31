@@ -51,8 +51,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func testKeyLoader(string) ([]byte, []byte, error) {
-	return pub, priv, nil
+func testKeyLoader(string) ([]byte, error) {
+	return priv, nil
 }
 
 func TestMultipleClean(t *testing.T) {
