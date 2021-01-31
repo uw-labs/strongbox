@@ -1,0 +1,26 @@
+kind: pipeline
+type: kubernetes
+name: default
+
+steps:
+  - name: fetch
+    image: docker:git
+    commands:
+      - git fetch --tags
+
+  - name: release
+    image: golang:1.15
+    environment:
+      CGO_ENABLED: 0
+      GITHUB_TOKEN:
+        from_secret: github_token
+    commands:
+      - go test -v ./... -cover
+      - curl -sL https://git.io/goreleaser | bash
+    when:
+      event: tag
+
+trigger:
+  event:
+    exclude:
+      - pull_request
