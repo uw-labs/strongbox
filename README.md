@@ -1,7 +1,5 @@
 ![Strongbox](strongbox-logo.png)
 
-[![Build Status](https://drone.prod.merit.uw.systems/api/badges/uw-labs/strongbox/status.svg)](https://drone.prod.merit.uw.systems/uw-labs/strongbox)
-
 Encryption for git users.
 
 Strongbox makes it easy to encrypt and decrypt files stored in git, with minimal
