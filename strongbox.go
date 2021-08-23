@@ -21,9 +21,12 @@ import (
 	"github.com/jacobsa/crypto/siv"
 )
 
-const version = "dev"
-
 var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+
 	keyLoader     = key
 	kr            keyRing
 	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
@@ -62,7 +65,7 @@ func main() {
 	flag.Parse()
 
 	if *flagVersion || (flag.NArg() == 1 && flag.Arg(0) == "version") {
-		fmt.Println(version)
+		fmt.Printf("version=%s commit=%s date=%s builtBy=%s", version, commit, date, builtBy)
 		return
 	}
 
