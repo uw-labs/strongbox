@@ -10,3 +10,11 @@ test: build-test-image
 
 bench:
 	go test -bench=.
+
+release:
+	@sd "const version = \"dev\"" "const version = \"$(VERSION)\"" strongbox.go
+	@git add -- strongbox.go
+	@git commit -m "Release $(VERSION)"
+	@sd "const version = \"$(VERSION)\"" "const version = \"dev\"" strongbox.go
+	@git add -- strongbox.go
+	@git commit -m "Clean up release $(VERSION)"
