@@ -65,7 +65,7 @@ func main() {
 	flag.Parse()
 
 	if *flagVersion || (flag.NArg() == 1 && flag.Arg(0) == "version") {
-		fmt.Printf("version=%s commit=%s date=%s builtBy=%s", version, commit, date, builtBy)
+		fmt.Printf("version=%s commit=%s date=%s builtBy=%s\n", version, commit, date, builtBy)
 		return
 	}
 
