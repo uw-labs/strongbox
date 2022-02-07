@@ -32,7 +32,11 @@ or as few files as you wish based on
 You can obtain a binary from https://github.com/uw-labs/strongbox/releases
 
 Alternatively, assuming you have a working [Go](https://golang.org) installation, you can
-install via `go get github.com/uw-labs/strongbox`
+install via the following command:
+
+```bash
+go install github.com/uw-labs/strongbox@v1.0.0
+```
 
 ## Usage
 
