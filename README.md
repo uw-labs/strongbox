@@ -22,8 +22,8 @@ or as few files as you wish based on
 * [Security](#security)
 * [Testing](#testing)
 * [Known issues](#known-issues)
-	* [Clone file ordering](#clone-file-ordering)
-		* [Workaround](#workaround)
+  * [Clone file ordering](#clone-file-ordering)
+    * [Workaround](#workaround)
 
 <!-- vim-markdown-toc -->
 
@@ -34,7 +34,7 @@ You can obtain a binary from https://github.com/uw-labs/strongbox/releases
 Alternatively, assuming you have a working [Go](https://golang.org) installation, you can
 install via the following command:
 
-```bash
+```sh
 go install github.com/uw-labs/strongbox@v1.0.0
 ```
 
@@ -59,7 +59,14 @@ go install github.com/uw-labs/strongbox@v1.0.0
    ```
    This will add a new key to your `.strongbox_keyring`. By default, the
    keyring is created in the `$HOME` directory, but this location can be changed
-   by setting the `$STRONGBOX_HOME` environmental variable.
+   by setting the `$STRONGBOX_HOME` or `$STRONGBOX_PATH` environmental variable.
+
+   For example:
+
+   ```sh
+   $ STRONGBOX_HOME=/some/directory strongbox # saves to /some/directory/.strongbox_keyring
+   $ STRONGBOX_PATH=/some/directory/strongbox.yml strongbox # saves to /some/directory/strongbox.yml
+   ```
 
 4. Include a `.strongbox-keyid` file in your repository containing public key
    you want to use (typically by copying a public key from

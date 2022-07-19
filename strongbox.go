@@ -80,8 +80,7 @@ func main() {
 	}
 
 	// Set up keyring file name
-	home := deriveHome()
-	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
+	kr = &fileKeyRing{fileName: derivePath()}
 
 	if *flagGenKey != "" {
 		genKey(*flagGenKey)
@@ -121,9 +120,22 @@ func deriveHome() string {
 		return home
 	}
 
-	log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
+	vars := "$STRONGBOX_HOME, $STRONGBOX_PATH, or $HOME"
+	line1 := fmt.Sprintf("Could not call os/user.Current() or find %s", vars)
+	line2 := fmt.Sprintf("Please recompile with CGO enabled or set %s", vars)
+
+	log.Fatal(fmt.Sprintf("%s\n%s", line1, line2))
+
 	// not reached
 	return ""
+}
+
+func derivePath() string {
+	if path := os.Getenv("STRONGBOX_PATH"); path != "" {
+		return path
+	}
+
+	return filepath.Join(deriveHome(), ".strongbox_keyring")
 }
 
 func decryptCLI() {
