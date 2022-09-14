@@ -39,6 +39,7 @@ var (
 	flagGenKey    = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
 	flagDecrypt   = flag.Bool("decrypt", false, "Decrypt single resource")
 	flagKey       = flag.String("key", "", "Private key to use to decrypt")
+	flagKeyRing   = flag.String("keyring", "", "strongbox keyring file path, if not set default '$HOME/.strongbox_keyring' will be used")
 
 	flagClean  = flag.String("clean", "", "intended to be called internally by git")
 	flagSmudge = flag.String("smudge", "", "intended to be called internally by git")
@@ -82,6 +83,15 @@ func main() {
 	// Set up keyring file name
 	home := deriveHome()
 	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
+
+	// if keyring flag is set replace default keyRing
+	if *flagKeyRing != "" {
+		kr = &fileKeyRing{fileName: *flagKeyRing}
+		// verify keyring is valid
+		if err := kr.Load(); err != nil {
+			log.Fatalf("unable to load keyring file:%s err:%s", *flagKeyRing, err)
+		}
+	}
 
 	if *flagGenKey != "" {
 		genKey(*flagGenKey)
