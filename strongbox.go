@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
@@ -40,6 +41,7 @@ var (
 	flagDecrypt   = flag.Bool("decrypt", false, "Decrypt single resource")
 	flagKey       = flag.String("key", "", "Private key to use to decrypt")
 	flagKeyRing   = flag.String("keyring", "", "strongbox keyring file path, if not set default '$HOME/.strongbox_keyring' will be used")
+	flagRecursive = flag.Bool("recursive", false, "Recursively decrypt all files under given folder, must be used with -decrypt flag")
 
 	flagClean  = flag.String("clean", "", "intended to be called internally by git")
 	flagSmudge = flag.String("smudge", "", "intended to be called internally by git")
@@ -51,10 +53,12 @@ var (
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-key key-name\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -key\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring <keyring_file_path>] -gen-key key-name\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring <keyring_file_path>] -decrypt -recursive <path>\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt -recursive -key <key> <path>\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt -key <key>\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -version\n")
+	fmt.Fprintf(os.Stderr, "\nif -keyring flag is not set default file '$HOME/.strongbox_keyring' or '$STRONGBOX_HOME/.strongbox_keyring' will be used as keyring\n")
 	os.Exit(2)
 }
 
@@ -99,11 +103,40 @@ func main() {
 	}
 
 	if *flagDecrypt {
+		// handle recursive
+		if *flagRecursive {
+			var err error
+
+			target := flag.Arg(0)
+			if target == "" {
+				target, err = os.Getwd()
+				if err != nil {
+					log.Fatalf("target path not provided and unable to get cwd err:%s", err)
+				}
+			}
+			// for recursive decryption 'key' flag is optional but if provided
+			// it should be valid and all encrypted file will be decrypted using it
+			dk, err := decode([]byte(*flagKey))
+			if err != nil && *flagKey != "" {
+				log.Fatalf("Unable to decode given private key %v", err)
+			}
+
+			if err = recursiveDecrypt(target, dk); err != nil {
+				log.Fatalln(err)
+			}
+			return
+		}
+
 		if *flagKey == "" {
 			log.Fatalf("Must provide a `-key` when using -decrypt")
 		}
 		decryptCLI()
 		return
+	}
+
+	if *flagRecursive {
+		log.Println("-recursive flag is only supported with -decrypt")
+		usage()
 	}
 
 	if *flagClean != "" {
@@ -284,6 +317,92 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	if _, err := io.Copy(w, bytes.NewReader(out)); err != nil {
 		log.Println(err)
 	}
+}
+
+// recursiveDecrypt will try and recursively decrypt files
+// if 'key' is provided then it will decrypt all encrypted files with given key
+// otherwise it will find key based on file location
+// if error is generated in finding key or in decryption then it will continue with next file
+// function will only return early if it failed to read/write files
+func recursiveDecrypt(target string, key []byte) error {
+	var decErrors []string
+	err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		// always return on error
+		if err != nil {
+			return err
+		}
+
+		// only process files
+		if entry.IsDir() {
+			// skip .git directory
+			if entry.Name() == ".git" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		file, err := os.OpenFile(path, os.O_RDWR, 0)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		// for optimisation only read required chunk of the file and verify if encrypted
+		chunk := make([]byte, len(defaultPrefix))
+		_, err = file.Read(chunk)
+		if err != nil && err != io.EOF {
+			return err
+		}
+
+		if !bytes.HasPrefix(chunk, prefix) {
+			return nil
+		}
+
+		if len(key) == 0 {
+			key, err = keyLoader(path)
+			if err != nil {
+				// continue with next file
+				decErrors = append(decErrors, fmt.Sprintf("unable to find key file:%s err:%s", path, err))
+				return nil
+			}
+		}
+
+		// read entire file from the beginning
+		file.Seek(0, io.SeekStart)
+		in, err := io.ReadAll(file)
+		if err != nil {
+			return err
+		}
+
+		out, err := decrypt(in, key)
+		if err != nil {
+			// continue with next file
+			decErrors = append(decErrors, fmt.Sprintf("unable to decrypt file:%s err:%s", path, err))
+			return nil
+		}
+
+		if err := file.Truncate(0); err != nil {
+			return err
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		if _, err := file.Write(out); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(decErrors) > 0 {
+		for _, e := range decErrors {
+			log.Println(e)
+		}
+		return fmt.Errorf("unable to decrypt some files")
+	}
+
+	return nil
 }
 
 func encrypt(b, key []byte) ([]byte, error) {
