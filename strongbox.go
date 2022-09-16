@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -177,7 +176,7 @@ func decryptCLI() {
 	} else {
 		fn = flag.Arg(0)
 	}
-	fb, err := ioutil.ReadFile(fn)
+	fb, err := os.ReadFile(fn)
 	if err != nil {
 		log.Fatalf("Unable to read file to decrypt %v", err)
 	}
@@ -249,7 +248,7 @@ func diff(filename string) {
 
 func clean(r io.Reader, w io.Writer, filename string) {
 	// Read the file, fail on error
-	in, err := ioutil.ReadAll(r)
+	in, err := io.ReadAll(r)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -280,7 +279,7 @@ func clean(r io.Reader, w io.Writer, filename string) {
 
 // Called by git on `git checkout`
 func smudge(r io.Reader, w io.Writer, filename string) {
-	in, err := ioutil.ReadAll(r)
+	in, err := io.ReadAll(r)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -445,7 +444,7 @@ func decompress(b []byte) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	b, err = ioutil.ReadAll(zr)
+	b, err = io.ReadAll(zr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -474,7 +473,7 @@ func decrypt(enc []byte, priv []byte) ([]byte, error) {
 	// strip prefix and any comment up to end of line
 	spl := bytes.SplitN(enc, []byte("\n"), 2)
 	if len(spl) != 2 {
-		return nil, errors.New("Couldn't split on end of line")
+		return nil, errors.New("couldn't split on end of line")
 	}
 	b64encoded := spl[1]
 	b64decoded, err := decode(b64encoded)
@@ -527,7 +526,7 @@ func findKey(filename string) ([]byte, error) {
 }
 
 func readKey(filename string) ([]byte, error) {
-	fp, err := ioutil.ReadFile(filename)
+	fp, err := os.ReadFile(filename)
 	if err != nil {
 		return []byte{}, err
 	}
