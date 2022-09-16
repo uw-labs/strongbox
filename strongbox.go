@@ -324,7 +324,7 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 // otherwise it will find key based on file location
 // if error is generated in finding key or in decryption then it will continue with next file
 // function will only return early if it failed to read/write files
-func recursiveDecrypt(target string, key []byte) error {
+func recursiveDecrypt(target string, givenKey []byte) error {
 	var decErrors []string
 	err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
 		// always return on error
@@ -358,6 +358,7 @@ func recursiveDecrypt(target string, key []byte) error {
 			return nil
 		}
 
+		key := givenKey
 		if len(key) == 0 {
 			key, err = keyLoader(path)
 			if err != nil {
