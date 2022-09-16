@@ -69,6 +69,23 @@ go install github.com/uw-labs/strongbox@v1.0.0
    directory structure until it finds the file.  This allows using different
    keys for different subdirectories within a repository.
 
+5. If strongbox keyring file is stored on different location `-keyring` can be used.
+   ie `strongbox [-keyring <keyring_file_path>] -gen-key key-name`
+
+6. Following commands can be used to manually decrypt file without gitOps
+   ```
+   # decrypt using default keyring file `$HOME/.strongbox_keyring`
+   strongbox -decrypt -recursive <path>
+
+   # decrypt using `keyring_file_path`
+   strongbox -keyring <keyring_file_path> -decrypt -recursive <path>
+
+   # decrypt using private key `<key>`
+   strongbox -key <key> -decrypt -recursive <path>
+
+   # decrypt single file with given key
+   strongbox -decrypt -key <key>
+   ```
 ## Existing project
 
 Strongbox uses [clean and smudge

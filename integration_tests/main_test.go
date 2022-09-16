@@ -1,8 +1,9 @@
+//go:build integration
+
 package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"testing"
@@ -33,15 +34,23 @@ func assertCommand(t *testing.T, dir, name string, arg ...string) (out []byte) {
 }
 
 func assertWriteFile(t *testing.T, filename string, data []byte, perm os.FileMode) {
-	err := ioutil.WriteFile(filename, data, perm)
+	err := os.WriteFile(filename, data, perm)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func keyIDFromKR(t *testing.T, name string) (keyID string) {
+func assertReadFile(t *testing.T, filename string) string {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func keysFromKR(t *testing.T, name string) (key, keyID string) {
 	kr := make(map[string]interface{})
-	krf, err := ioutil.ReadFile(HOME + "/.strongbox_keyring")
+	krf, err := os.ReadFile(HOME + "/.strongbox_keyring")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +63,12 @@ func keyIDFromKR(t *testing.T, name string) (keyID string) {
 	for k := range kes {
 		desc := kes[k].(map[interface{}]interface{})["description"].(string)
 		if name == desc {
-			return kes[k].(map[interface{}]interface{})["key-id"].(string)
+			return kes[k].(map[interface{}]interface{})["key"].(string),
+				kes[k].(map[interface{}]interface{})["key-id"].(string)
 		}
 	}
 	t.Fatal(fmt.Sprintf("no keyId for give desc: %s", name))
-	return ""
+	return "", ""
 }
 
 func TestMain(m *testing.M) {
@@ -97,7 +107,7 @@ func TestMain(m *testing.M) {
 
 func TestSimpleEnc(t *testing.T) {
 	repoDir := HOME + "/test-proj"
-	keyID := keyIDFromKR(t, "test00")
+	_, keyID := keysFromKR(t, "test00")
 	secVal := "secret123wombat"
 
 	ga := `secret filter=strongbox diff=strongbox
@@ -152,4 +162,113 @@ func TestMissingKey(t *testing.T) {
 
 	// remove the file
 	assertCommand(t, "/", "rm", repoDir+"/secrets/sec-missing-key")
+}
+
+func TestRecursiveDecryption(t *testing.T) {
+	repoDir := HOME + "/test-rec-dec"
+
+	assertCommand(t, "/", "mkdir", "-p", repoDir+"/secrets/")
+	assertCommand(t, "/", "mkdir", "-p", repoDir+"/app/secrets/")
+
+	assertCommand(t, repoDir, "git", "init")
+
+	// generate new private keys
+	assertCommand(t, "/", "strongbox", "-gen-key", "rec-dec-01")
+	assertCommand(t, "/", "strongbox", "-gen-key", "rec-dec-02")
+
+	pKey1, keyID1 := keysFromKR(t, "rec-dec-01")
+	pKey2, keyID2 := keysFromKR(t, "rec-dec-02")
+
+	secVal := "secret123wombat"
+
+	ga := `secret filter=strongbox diff=strongbox
+secrets/* filter=strongbox diff=strongbox
+*/secrets/* filter=strongbox diff=strongbox`
+
+	// setup root keyID and nested app folder with different keyID
+	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
+	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID1), 0644)
+	assertWriteFile(t, repoDir+"/app/.strongbox-keyid", []byte(keyID2), 0644)
+
+	// Write plan secrets
+	assertWriteFile(t, repoDir+"/secret", []byte(secVal+"01"), 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", []byte(secVal+"02"), 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", []byte(secVal+"03"), 0644)
+
+	// set test dir as Home because git command will use default strongbox key
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestSimpleEnc\"")
+
+	// Make sure files are encrypted
+	ptOut01, _ := command(repoDir, "git", "show", "--", "secret")
+	encOut01, _ := command(repoDir, "git", "show", "HEAD:secret")
+	assert.Contains(t, string(ptOut01), secVal+"01", "should be in plain text")
+	assert.Contains(t, string(encOut01), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	ptOut02, _ := command(repoDir, "git", "show", "--", "secrets/s2")
+	encOut02, _ := command(repoDir, "git", "show", "HEAD:secrets/s2")
+	assert.Contains(t, string(ptOut02), secVal+"02", "should be in plain text")
+	assert.Contains(t, string(encOut02), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	ptOut03, _ := command(repoDir, "git", "show", "--", "app/secrets/s3")
+	encOut03, _ := command(repoDir, "git", "show", "HEAD:app/secrets/s3")
+	assert.Contains(t, string(ptOut03), secVal+"03", "should be in plain text")
+	assert.Contains(t, string(encOut03), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	// TEST 1 (using default keyring file location)
+	//override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	// run command from the root of the target folder without path arg
+	assertCommand(t, repoDir, "strongbox", "-decrypt", "-recursive")
+
+	// make sure all files are decrypted
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), secVal+"01", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), secVal+"02", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), secVal+"03", "should be in plain text")
+
+	// TEST 2 (using custom keyring file location)
+	// override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	keyRingPath := repoDir + "/.keyring"
+	// move keyring file
+	assertCommand(t, "/", "mv", HOME+"/.strongbox_keyring", keyRingPath)
+	// run command from outside of the target folder
+	assertCommand(t, "/", "strongbox", "-keyring", keyRingPath, "-decrypt", "-recursive", repoDir)
+
+	// make sure all files are decrypted
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), secVal+"01", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), secVal+"02", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), secVal+"03", "should be in plain text")
+
+	// TEST 3.1 (using given private key)
+	// override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	//since rec-dec-01 is not used to encrypt app folders secret so expect error
+	command(repoDir, "strongbox", "-key", pKey1, "-decrypt", "-recursive", ".")
+
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), secVal+"01", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), secVal+"02", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	// TEST 3.2 (using custom keyring file location)
+	// override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	//since rec-dec-02 is not used to encrypt root folders secrets so expect error
+	command(repoDir, "strongbox", "-key", pKey2, "-decrypt", "-recursive", ".")
+
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), secVal+"03", "should be in plain text")
 }

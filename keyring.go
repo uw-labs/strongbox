@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -57,7 +56,7 @@ func (kr *fileKeyRing) Key(keyID []byte) ([]byte, error) {
 
 func (kr *fileKeyRing) Load() error {
 
-	bytes, err := ioutil.ReadFile(kr.fileName)
+	bytes, err := os.ReadFile(kr.fileName)
 	if err != nil {
 		return err
 	}
@@ -81,5 +80,5 @@ func (kr *fileKeyRing) Save() error {
 		}
 	}
 
-	return ioutil.WriteFile(kr.fileName, ser, 0600)
+	return os.WriteFile(kr.fileName, ser, 0600)
 }
