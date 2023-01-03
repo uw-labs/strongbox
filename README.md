@@ -38,6 +38,14 @@ install via the following command:
 go install github.com/uw-labs/strongbox@v1.0.0
 ```
 
+### Homebrew
+
+If you're on macOS or Linux and have [Homebrew](https://brew.sh/) installed, getting Strongbox is as simple as running:
+
+```
+brew install uw-labs/tap/strongbox
+```
+
 ## Usage
 
 1. As a one time action, install the plugin by running `strongbox -git-config`.
