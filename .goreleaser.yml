@@ -18,13 +18,25 @@ builds:
         goarch: '386'
       - goos: freebsd
         goarch: arm64
+
 release:
   github:
     owner: uw-labs
     name: strongbox
+
 archives:
   - builds:
       - main
     format: binary
     files:
       - none*
+
+brews:
+  - name: strongbox
+    description: Encryption for git users
+    homepage: https://github.com/uw-labs/strongbox
+    license: LGPL-3.0
+    folder: Formula
+    tap:
+      owner: uw-labs
+      name: homebrew-tap
