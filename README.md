@@ -11,22 +11,6 @@ It supports use of different keys per directory if wanted. It can cover as many
 or as few files as you wish based on
 [.gitattributes](https://www.git-scm.com/docs/gitattributes)
 
-
-<!-- vim-markdown-toc GFM -->
-
-* [Installation](#installation)
-* [Usage](#usage)
-* [Existing project](#existing-project)
-* [Verification](#verification)
-* [Key rotation](#key-rotation)
-* [Security](#security)
-* [Testing](#testing)
-* [Known issues](#known-issues)
-	* [Clone file ordering](#clone-file-ordering)
-		* [Workaround](#workaround)
-
-<!-- vim-markdown-toc -->
-
 ## Installation
 
 You can obtain a binary from https://github.com/uw-labs/strongbox/releases
@@ -35,7 +19,7 @@ Alternatively, assuming you have a working [Go](https://golang.org) installation
 install via the following command:
 
 ```bash
-go install github.com/uw-labs/strongbox@v1.0.0
+go install github.com/uw-labs/strongbox@v1.1.0
 ```
 
 ### Homebrew
@@ -165,7 +149,8 @@ fail to find the decryption key.
 
 Order of files being cloned is dictated by the index.
 
-#### Workaround
+#### Workarounds
 
-Clone repository, let the descryption fail. Delete encrypted files and do `git
-checkout` on the deleted files.
+1. Clone repository, let the descryption fail. Delete encrypted files and do
+   `git checkout` on the deleted files.
+2. Move affected files down to a subdirectory from `.strongbox-keyid` file
