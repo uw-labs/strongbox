@@ -1,6 +1,6 @@
 module github.com/uw-labs/strongbox
 
-go 1.19
+go 1.20
 
 require (
 	github.com/jacobsa/crypto v0.0.0-20190317225127-9f44e2d11115
