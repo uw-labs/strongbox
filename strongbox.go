@@ -16,6 +16,11 @@ import (
 	"filippo.io/age/armor"
 )
 
+const (
+	recipientFilename = ".strongbox_recipient"
+	identityFilename  = ".strongbox_identity"
+)
+
 var (
 	flagGitConfig    = flag.Bool("git-config", false, "Configure git for strongbox use")
 	flagGenIdentity  = flag.String("gen-identity", "", "Generate a new identity and add it to your strongbox identity file")
@@ -83,11 +88,11 @@ func deriveIdentityFile() string {
 	// Try user.Current which works in most cases, but may not work with CGO disabled.
 	u, err := user.Current()
 	if err == nil && u.HomeDir != "" {
-		return filepath.Join(u.HomeDir, ".strongbox_identity")
+		return filepath.Join(u.HomeDir, identityFilename)
 	}
 	// try HOME env var
 	if home := os.Getenv("HOME"); home != "" {
-		return filepath.Join(home, ".strongbox_identity")
+		return filepath.Join(home, identityFilename)
 	}
 
 	log.Fatal("Could not call os/user.Current() or find $STRONGBOX_IDENTITY or $HOME. Please recompile with CGO enabled or set $STRONGBOX_IDENTITY or $HOME")
@@ -97,11 +102,11 @@ func deriveIdentityFile() string {
 
 func gitConfig() {
 	args := [][]string{
-		{"config", "--global", "--replace-all", "filter.strongbox_age.clean", "strongbox -clean %f"},
-		{"config", "--global", "--replace-all", "filter.strongbox_age.smudge", "strongbox -smudge %f"},
-		{"config", "--global", "--replace-all", "filter.strongbox_age.required", "true"},
+		{"config", "--global", "--replace-all", "filter.strongbox_v2.clean", "strongbox_v2 -clean %f"},
+		{"config", "--global", "--replace-all", "filter.strongbox_v2.smudge", "strongbox_v2 -smudge %f"},
+		{"config", "--global", "--replace-all", "filter.strongbox_v2.required", "true"},
 
-		{"config", "--global", "--replace-all", "diff.strongbox_age.textconv", "strongbox -diff"},
+		{"config", "--global", "--replace-all", "diff.strongbox_v2.textconv", "strongbox_v2 -diff"},
 	}
 	for _, command := range args {
 		cmd := exec.Command("git", command...)
@@ -164,13 +169,13 @@ func clean(r io.Reader, w io.Writer, filename string) {
 		return
 	}
 	// File is plaintext and needs to be encrypted, find the recipient, fail on error
-	recipient, err := findRecipient(filename)
+	recipients, err := findRecipients(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// encrypt the file, fail on error
 	armorWriter := armor.NewWriter(w)
-	wc, err := age.Encrypt(armorWriter, recipient)
+	wc, err := age.Encrypt(armorWriter, recipients...)
 	if err != nil {
 		log.Fatalf("Failed to create encrypted file: %v", err)
 	}
@@ -222,17 +227,30 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	}
 }
 
-func findRecipient(filename string) (age.Recipient, error) {
+func findRecipients(filename string) ([]age.Recipient, error) {
+	var recipients []age.Recipient
 	path := filepath.Dir(filename)
 	for {
 		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
-			keyFilename := filepath.Join(path, ".strongbox_recipient")
+			keyFilename := filepath.Join(path, recipientFilename)
 			if keyFile, err := os.Stat(keyFilename); err == nil && !keyFile.IsDir() {
-				publicKey, err := os.ReadFile(keyFilename)
+				publicKeys, err := os.ReadFile(keyFilename)
 				if err != nil {
 					return nil, err
 				}
-				return age.ParseX25519Recipient(strings.TrimSuffix(string(publicKey), "\n"))
+				lines := bytes.Split(publicKeys, []byte("\n"))
+				for _, line := range lines {
+					line = bytes.TrimSpace(line)
+					if len(line) == 0 {
+						continue
+					}
+					recipient, err := age.ParseX25519Recipient(string(line))
+					if err != nil {
+						return nil, err
+					}
+					recipients = append(recipients, recipient)
+				}
+				return recipients, nil
 			}
 		}
 		if path == "." {
@@ -240,5 +258,6 @@ func findRecipient(filename string) (age.Recipient, error) {
 		}
 		path = filepath.Dir(path)
 	}
+
 	return nil, fmt.Errorf("failed to find recipient for file %s", filename)
 }

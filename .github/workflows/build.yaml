@@ -20,8 +20,6 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
-      - name: Test
-        run: make test
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v3
         with:

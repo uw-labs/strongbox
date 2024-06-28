@@ -1,11 +1,12 @@
 ![Strongbox](strongbox-logo.png)
 
-Encryption for git users.
+Encryption for Git users.
 
-Strongbox makes it easy to encrypt and decrypt files stored in git, with minimal
-divergence from a typical git workflow.  Once installed, strongbox enables
-normal use of commands such as `git diff` etc. and all of the files that should
-be encrypted in the repository remain decrypted on your working copy.
+Strongbox makes it easy to encrypt and decrypt files stored in Git, with
+minimal divergence from a typical Git workflow.  Once installed, Strongbox
+enables normal use of commands such as `git diff` etc. and all of the files
+that should be encrypted in the repository remain decrypted on your working
+copy.
 
 It supports use of different keys per directory if wanted. It can cover as many
 or as few files as you wish based on
@@ -18,16 +19,17 @@ You can obtain a binary from https://github.com/uw-labs/strongbox/releases
 Alternatively, assuming you have a working [Go](https://golang.org) installation, you can
 install via the following command:
 
-```bash
-go install github.com/uw-labs/strongbox@v1.1.0
+```console
+$ go install github.com/uw-labs/strongbox@v2.0.0-RC1
 ```
 
 ### Homebrew
 
-If you're on macOS or Linux and have [Homebrew](https://brew.sh/) installed, getting Strongbox is as simple as running:
+If you're on macOS or Linux and have [Homebrew](https://brew.sh/) installed,
+getting Strongbox is as simple as running:
 
-```
-brew install uw-labs/tap/strongbox
+```console
+$ brew install uw-labs/tap/strongbox
 ```
 
 ## Usage
@@ -36,18 +38,18 @@ brew install uw-labs/tap/strongbox
    This will edit global git config to enable strongbox filter and diff
    configuration.
 
-2. In each repository you want to use strongbox, create `.gitattributes` file
+2. In each repository you want to use Strongbox, create `.gitattributes` file
    containing the patterns to be managed by strongbox.
 
    For example:
 
    ```
-   secrets/* filter=strongbox diff=strongbox
+   secrets/* filter=strongbox_v2 diff=strongbox_v2
    ```
 
 3. Generate a key to use for the encryption, for example:
    ```
-   strongbox -gen-key my-key
+   strongbox_v2 -gen-identity my-key
    ```
    This will add a new key to your `.strongbox_keyring`. By default, the
    keyring is created in the `$HOME` directory, but this location can be changed
