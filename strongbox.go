@@ -2,15 +2,9 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -18,7 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jacobsa/crypto/siv"
+	"filippo.io/age"
+	"filippo.io/age/armor"
 )
 
 var (
@@ -27,20 +22,15 @@ var (
 	date    = "unknown"
 	builtBy = "unknown"
 
-	keyLoader     = key
-	kr            keyRing
-	prefix        = []byte("# STRONGBOX ENCRYPTED RESOURCE ;")
-	defaultPrefix = []byte("# STRONGBOX ENCRYPTED RESOURCE ; See https://github.com/uw-labs/strongbox\n")
-
-	errKeyNotFound = errors.New("key not found")
-
 	// flags
-	flagGitConfig = flag.Bool("git-config", false, "Configure git for strongbox use")
-	flagGenKey    = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
-	flagDecrypt   = flag.Bool("decrypt", false, "Decrypt single resource")
-	flagKey       = flag.String("key", "", "Private key to use to decrypt")
-	flagKeyRing   = flag.String("keyring", "", "strongbox keyring file path, if not set default '$HOME/.strongbox_keyring' will be used")
-	flagRecursive = flag.Bool("recursive", false, "Recursively decrypt all files under given folder, must be used with -decrypt flag")
+	flagDecrypt      = flag.Bool("decrypt", false, "Decrypt single resource")
+	flagGenIdentity  = flag.String("gen-identity", "", "Generate a new identity and add it to your strongbox identity file")
+	flagGenKey       = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
+	flagGitConfig    = flag.Bool("git-config", false, "Configure git for strongbox use")
+	flagIdentityFile = flag.String("identity-file", filepath.Join(os.Getenv("HOME"), defaultIdentityFilename), "strongbox identity file, if not set default '$HOME/.strongbox_identity' will be used")
+	flagKey          = flag.String("key", "", "Private key to use to decrypt")
+	flagKeyRing      = flag.String("keyring", "", "strongbox keyring file path, if not set default '$HOME/.strongbox_keyring' will be used")
+	flagRecursive    = flag.Bool("recursive", false, "Recursively decrypt all files under given folder, must be used with -decrypt flag")
 
 	flagClean  = flag.String("clean", "", "intended to be called internally by git")
 	flagSmudge = flag.String("smudge", "", "intended to be called internally by git")
@@ -53,6 +43,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring <keyring_file_path>] -gen-key key-name\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-identity <identity name>\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox -identity-file <path>\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring <keyring_file_path>] -decrypt -recursive <path>\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt -recursive -key <key> <path>\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt -key <key>\n")
@@ -138,6 +130,15 @@ func main() {
 		usage()
 	}
 
+	if *flagIdentityFile != "" {
+		identityFilename = *flagIdentityFile
+	}
+
+	if *flagGenIdentity != "" {
+		ageGenIdentity(*flagGenIdentity)
+		return
+	}
+
 	if *flagClean != "" {
 		clean(os.Stdin, os.Stdout, *flagClean)
 		return
@@ -208,28 +209,6 @@ func gitConfig() {
 	log.Println("git global configuration updated successfully")
 }
 
-func genKey(desc string) {
-	err := kr.Load()
-	if err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
-	}
-
-	key := make([]byte, 32)
-	_, err = rand.Read(key)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	keyID := sha256.Sum256(key)
-
-	kr.AddKey(desc, keyID[:], key)
-
-	err = kr.Save()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func diff(filename string) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -252,28 +231,36 @@ func clean(r io.Reader, w io.Writer, filename string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Check the file is plaintext, if its an encrypted strongbox file, copy as is, and exit 0
-	if bytes.HasPrefix(in, prefix) {
+	// Check the file is plaintext, if its an encrypted strongbox or age file, copy as is, and exit 0
+	if bytes.HasPrefix(in, prefix) || strings.HasPrefix(string(in), armor.Header) {
 		_, err = io.Copy(w, bytes.NewReader(in))
 		if err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
-	// File is plaintext and needs to be encrypted, get the key, fail on error
-	key, err := keyLoader(filename)
+	// File is plaintext and needs to be encrypted, get the recipient or a
+	// key, fail on error
+	recipient, key, err := findRecipients(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// encrypt the file, fail on error
-	out, err := encrypt(in, key)
-	if err != nil {
-		log.Fatal(err)
+
+	// found recipient file and plaintext differs from HEAD
+	if recipient != nil {
+		ageEncrypt(w, recipient, in, filename)
 	}
-	// write out encrypted file, fail on error
-	_, err = io.Copy(w, bytes.NewReader(out))
-	if err != nil {
-		log.Fatal(err)
+	if key != nil {
+		// encrypt the file, fail on error
+		out, err := encrypt(in, key)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// write out encrypted file, fail on error
+		_, err = io.Copy(w, bytes.NewReader(out))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -284,237 +271,68 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 		log.Fatal(err)
 	}
 
-	// file is a non-strongbox file, copy as is and exit
-	if !bytes.HasPrefix(in, prefix) {
+	if strings.HasPrefix(string(in), armor.Header) {
+		ageDecrypt(w, in)
+		return
+	}
+	if bytes.HasPrefix(in, prefix) {
+		key, err := keyLoader(filename)
+		if err != nil {
+			// don't log error if its keyNotFound
+			switch err {
+			case errKeyNotFound:
+			default:
+				log.Println(err)
+			}
+			// Couldn't load the key, just copy as is and return
+			if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
+				log.Println(err)
+			}
+			return
+		}
+
+		out, err := decrypt(in, key)
+		if err != nil {
+			log.Println(err)
+			out = in
+		}
+		if _, err := io.Copy(w, bytes.NewReader(out)); err != nil {
+			log.Println(err)
+		}
+	}
+
+	// file is a non-siv and non-age file, copy as is and exit
+	if !bytes.HasPrefix(in, prefix) && !strings.HasPrefix(string(in), armor.Header) {
 		_, err = io.Copy(w, bytes.NewReader(in))
 		if err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
-
-	key, err := keyLoader(filename)
-	if err != nil {
-		// don't log error if its keyNotFound
-		switch err {
-		case errKeyNotFound:
-		default:
-			log.Println(err)
-		}
-		// Couldn't load the key, just copy as is and return
-		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
-			log.Println(err)
-		}
-		return
-	}
-
-	out, err := decrypt(in, key)
-	if err != nil {
-		log.Println(err)
-		out = in
-	}
-	if _, err := io.Copy(w, bytes.NewReader(out)); err != nil {
-		log.Println(err)
-	}
 }
 
-// recursiveDecrypt will try and recursively decrypt files
-// if 'key' is provided then it will decrypt all encrypted files with given key
-// otherwise it will find key based on file location
-// if error is generated in finding key or in decryption then it will continue with next file
-// function will only return early if it failed to read/write files
-func recursiveDecrypt(target string, givenKey []byte) error {
-	var decErrors []string
-	err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
-		// always return on error
-		if err != nil {
-			return err
-		}
-
-		// only process files
-		if entry.IsDir() {
-			// skip .git directory
-			if entry.Name() == ".git" {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		file, err := os.OpenFile(path, os.O_RDWR, 0)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-
-		// for optimisation only read required chunk of the file and verify if encrypted
-		chunk := make([]byte, len(defaultPrefix))
-		_, err = file.Read(chunk)
-		if err != nil && err != io.EOF {
-			return err
-		}
-
-		if !bytes.HasPrefix(chunk, prefix) {
-			return nil
-		}
-
-		key := givenKey
-		if len(key) == 0 {
-			key, err = keyLoader(path)
-			if err != nil {
-				// continue with next file
-				decErrors = append(decErrors, fmt.Sprintf("unable to find key file:%s err:%s", path, err))
-				return nil
-			}
-		}
-
-		// read entire file from the beginning
-		file.Seek(0, io.SeekStart)
-		in, err := io.ReadAll(file)
-		if err != nil {
-			return err
-		}
-
-		out, err := decrypt(in, key)
-		if err != nil {
-			// continue with next file
-			decErrors = append(decErrors, fmt.Sprintf("unable to decrypt file:%s err:%s", path, err))
-			return nil
-		}
-
-		if err := file.Truncate(0); err != nil {
-			return err
-		}
-		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			return err
-		}
-		if _, err := file.Write(out); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if len(decErrors) > 0 {
-		for _, e := range decErrors {
-			log.Println(e)
-		}
-		return fmt.Errorf("unable to decrypt some files")
-	}
-
-	return nil
-}
-
-func encrypt(b, key []byte) ([]byte, error) {
-	b = compress(b)
-	out, err := siv.Encrypt(nil, key, b, nil)
-	if err != nil {
-		return nil, err
-	}
-	var buf []byte
-	buf = append(buf, defaultPrefix...)
-	b64 := encode(out)
-	for len(b64) > 0 {
-		l := 76
-		if len(b64) < 76 {
-			l = len(b64)
-		}
-		buf = append(buf, b64[0:l]...)
-		buf = append(buf, '\n')
-		b64 = b64[l:]
-	}
-	return buf, nil
-}
-
-func compress(b []byte) []byte {
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	_, err := zw.Write(b)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		log.Fatal(err)
-	}
-	return buf.Bytes()
-}
-
-func decompress(b []byte) []byte {
-	zr, err := gzip.NewReader(bytes.NewReader(b))
-	if err != nil {
-		log.Fatal(err)
-	}
-	b, err = io.ReadAll(zr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := zr.Close(); err != nil {
-		log.Fatal(err)
-	}
-	return b
-}
-
-func encode(decoded []byte) []byte {
-	b64 := make([]byte, base64.StdEncoding.EncodedLen(len(decoded)))
-	base64.StdEncoding.Encode(b64, decoded)
-	return b64
-}
-
-func decode(encoded []byte) ([]byte, error) {
-	decoded := make([]byte, len(encoded))
-	i, err := base64.StdEncoding.Decode(decoded, encoded)
-	if err != nil {
-		return nil, err
-	}
-	return decoded[0:i], nil
-}
-
-func decrypt(enc []byte, priv []byte) ([]byte, error) {
-	// strip prefix and any comment up to end of line
-	spl := bytes.SplitN(enc, []byte("\n"), 2)
-	if len(spl) != 2 {
-		return nil, errors.New("couldn't split on end of line")
-	}
-	b64encoded := spl[1]
-	b64decoded, err := decode(b64encoded)
-	if err != nil {
-		return nil, err
-	}
-	decrypted, err := siv.Decrypt(priv, b64decoded, nil)
-	if err != nil {
-		return nil, err
-	}
-	decrypted = decompress(decrypted)
-	return decrypted, nil
-}
-
-// key returns private key and error
-func key(filename string) ([]byte, error) {
-	keyID, err := findKey(filename)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	err = kr.Load()
-	if err != nil {
-		return []byte{}, err
-	}
-
-	key, err := kr.Key(keyID)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	return key, nil
-}
-
-func findKey(filename string) ([]byte, error) {
+// Finds closest age recipient or siv keyid
+func findRecipients(filename string) ([]age.Recipient, []byte, error) {
 	path := filepath.Dir(filename)
 	for {
 		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+			ageRecipientFilename := filepath.Join(path, recipientFilename)
+			// If we found `.strongbox_recipient` - parse it and return
+			if keyFile, err := os.Stat(ageRecipientFilename); err == nil && !keyFile.IsDir() {
+				recipients, err := ageFileToRecipient(ageRecipientFilename)
+				if err != nil {
+					return nil, nil, err
+				}
+				return recipients, nil, nil
+			}
+			// If we found `strongbox-keyid` - get the corresponding key and return it
 			keyFilename := filepath.Join(path, ".strongbox-keyid")
 			if keyFile, err := os.Stat(keyFilename); err == nil && !keyFile.IsDir() {
-				return readKey(keyFilename)
+				key, err := sivFileToKey(keyFilename)
+				if err != nil {
+					return nil, nil, err
+				}
+				return nil, key, nil
 			}
 		}
 		if path == "." {
@@ -522,22 +340,6 @@ func findKey(filename string) ([]byte, error) {
 		}
 		path = filepath.Dir(path)
 	}
-	return []byte{}, fmt.Errorf("failed to find key id for file %s", filename)
-}
 
-func readKey(filename string) ([]byte, error) {
-	fp, err := os.ReadFile(filename)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	b64 := strings.TrimSpace(string(fp))
-	b, err := decode([]byte(b64))
-	if err != nil {
-		return []byte{}, err
-	}
-	if len(b) != 32 {
-		return []byte{}, fmt.Errorf("unexpected key length %d", len(b))
-	}
-	return b, nil
+	return nil, nil, fmt.Errorf("failed to find recipient or keyid for file %s", filename)
 }
