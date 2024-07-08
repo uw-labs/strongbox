@@ -1,115 +1,340 @@
+//go:build integration
+
 package main
 
 import (
-	"bytes"
-	"crypto/rand"
-	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
 	"testing"
+
+	yaml "gopkg.in/yaml.v2"
 
 	"github.com/stretchr/testify/assert"
 )
 
 var (
-	priv, pub []byte
-	plain     = []byte("hello world. this is some plain text for testing")
+	HOME = os.Getenv("HOME")
 )
 
-type mockKeyRing struct{}
-
-func (m *mockKeyRing) Load() error {
-	return nil
+func command(dir, name string, arg ...string) (out []byte, err error) {
+	cmd := exec.Command(name, arg...)
+	cmd.Dir = dir
+	out, err = cmd.CombinedOutput()
+	fmt.Println(string(out))
+	return
 }
 
-func (m *mockKeyRing) Save() error {
-	return nil
+func assertCommand(t *testing.T, dir, name string, arg ...string) (out []byte) {
+	out, err := command(dir, name, arg...)
+	if err != nil {
+		t.Fatal(string(out))
+	}
+	return
 }
 
-func (m *mockKeyRing) AddKey(name string, keyID []byte, key []byte) {
+func assertWriteFile(t *testing.T, filename string, data []byte, perm os.FileMode) {
+	err := os.WriteFile(filename, data, perm)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
-func (m *mockKeyRing) Key(keyID []byte) ([]byte, error) {
-	return priv, nil
+func assertReadFile(t *testing.T, filename string) string {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func keysFromKR(t *testing.T, name string) (key, keyID string) {
+	kr := make(map[string]interface{})
+	krf, err := os.ReadFile(HOME + "/.strongbox_keyring")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = yaml.Unmarshal(krf, kr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kes := kr["keyentries"].([]interface{})
+
+	for k := range kes {
+		desc := kes[k].(map[interface{}]interface{})["description"].(string)
+		if name == desc {
+			return kes[k].(map[interface{}]interface{})["key"].(string),
+				kes[k].(map[interface{}]interface{})["key-id"].(string)
+		}
+	}
+	t.Fatal(fmt.Sprintf("no keyId for give desc: %s", name))
+	return "", ""
+}
+
+func recipients() [][][]byte {
+	f, _ := os.ReadFile(HOME + "/.strongbox_identity")
+	r := regexp.MustCompile(`(?m)^.*public key.*(age.*)$`)
+	return r.FindAllSubmatch(f, -1)
 }
 
 func TestMain(m *testing.M) {
-	var err error
-
-	priv = make([]byte, 32)
-	_, err = rand.Read(priv)
+	out, err := command("/", "git", "config", "--global", "user.email", "you@example.com")
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
 	}
-
-	keyID := sha256.Sum256(priv)
-	pub = keyID[:]
-
-	keyLoader = testKeyLoader
-	kr = &mockKeyRing{}
-
+	out, err = command("/", "git", "config", "--global", "user.name", "test")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command("/", "strongbox", "-git-config")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command("/", "strongbox", "-gen-key", "test00")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command("/", "strongbox", "-gen-identity", "ident1")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command("/", "strongbox", "-gen-identity", "ident2")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command("/", "mkdir", HOME+"/test-proj")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command(HOME+"/test-proj", "git", "init")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
 	os.Exit(m.Run())
 }
 
-func testKeyLoader(string) ([]byte, error) {
-	return priv, nil
+func TestSimpleEnc(t *testing.T) {
+	repoDir := HOME + "/test-proj"
+	_, keyID := keysFromKR(t, "test00")
+	secVal := "secret123wombat"
+
+	ga := `secret filter=strongbox diff=strongbox
+secrets/* filter=strongbox diff=strongbox`
+	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
+	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID), 0644)
+	assertWriteFile(t, repoDir+"/secret", []byte(secVal), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestSimpleEnc\"")
+	ptOut, _ := command(repoDir, "git", "show", "--", "secret")
+	encOut, _ := command(repoDir, "git", "show", "HEAD:secret")
+
+	assert.Contains(t, string(ptOut), secVal, "no plaintext")
+	assert.Contains(t, string(encOut), "STRONGBOX ENCRYPTED RESOURCE", "no plaintext")
 }
 
-func TestMultipleClean(t *testing.T) {
-	assert := assert.New(t)
+func TestNestedEnc(t *testing.T) {
+	repoDir := HOME + "/test-proj"
+	secVal := "secret123croc"
 
-	var cleaned bytes.Buffer
-	clean(bytes.NewReader(plain), &cleaned, "")
+	assertCommand(t, repoDir, "mkdir", "-p", "secrets/dir0")
+	assertWriteFile(t, repoDir+"/secrets/dir0/sec0", []byte(secVal), 0644)
 
-	var doubleCleaned bytes.Buffer
-	clean(bytes.NewReader(cleaned.Bytes()), &doubleCleaned, "")
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestNestedEnc\"")
 
-	assert.Equal(cleaned.String(), doubleCleaned.String())
+	ptOut, _ := command(repoDir, "git", "show")
+	encOut, _ := command(repoDir, "git", "show", "HEAD:secret")
+
+	assert.Contains(t, string(ptOut), secVal, "no plaintext")
+	assert.Contains(t, string(encOut), "STRONGBOX ENCRYPTED RESOURCE", "no plaintext")
 }
 
-func TestSmudgeAlreadyPlaintext(t *testing.T) {
-	assert := assert.New(t)
+func TestMissingKey(t *testing.T) {
+	repoDir := HOME + "/test-proj"
+	secVal := "secret-missing-key"
 
-	var smudged bytes.Buffer
-	smudge(bytes.NewReader(plain), &smudged, "")
+	// remove the key for encryption
+	assertCommand(t, "/", "mv", HOME+"/.strongbox_keyring", HOME+"/.strongbox_keyring.bkup")
 
-	assert.Equal(string(plain), smudged.String())
+	assertCommand(t, "/", "strongbox", "-gen-key", "tmp")
+
+	assertWriteFile(t, repoDir+"/secrets/sec-missing-key", []byte(secVal), 0644)
+	_, err := command(repoDir, "git", "add", ".")
+	assert.Error(t, err, "Should error on add attempt")
+
+	// clean up
+	assertCommand(t, "/", "mv", HOME+"/.strongbox_keyring.bkup", HOME+"/.strongbox_keyring")
+
+	// as the correct is now present, should not error and present untracked changes
+	assertCommand(t, repoDir, "git", "status")
+
+	// remove the file
+	assertCommand(t, "/", "rm", repoDir+"/secrets/sec-missing-key")
 }
 
-func TestRoundTrip(t *testing.T) {
-	assert := assert.New(t)
+func TestRecursiveDecryption(t *testing.T) {
+	repoDir := HOME + "/test-rec-dec"
 
-	var cleaned bytes.Buffer
-	clean(bytes.NewReader(plain), &cleaned, "")
+	assertCommand(t, "/", "mkdir", "-p", repoDir+"/secrets/")
+	assertCommand(t, "/", "mkdir", "-p", repoDir+"/app/secrets/")
 
-	fmt.Printf("%s", string(cleaned.String()))
+	assertCommand(t, repoDir, "git", "init")
 
-	assert.NotEqual(plain, cleaned.Bytes())
+	// generate new private keys
+	assertCommand(t, "/", "strongbox", "-gen-key", "rec-dec-01")
+	assertCommand(t, "/", "strongbox", "-gen-key", "rec-dec-02")
 
-	var smudged bytes.Buffer
-	smudge(bytes.NewReader(cleaned.Bytes()), &smudged, "")
+	pKey1, keyID1 := keysFromKR(t, "rec-dec-01")
+	pKey2, keyID2 := keysFromKR(t, "rec-dec-02")
 
-	assert.Equal(string(plain), smudged.String())
+	secVal := "secret123wombat"
+
+	ga := `secret filter=strongbox diff=strongbox
+secrets/* filter=strongbox diff=strongbox
+*/secrets/* filter=strongbox diff=strongbox`
+
+	// setup root keyID and nested app folder with different keyID
+	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
+	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID1), 0644)
+	assertWriteFile(t, repoDir+"/app/.strongbox-keyid", []byte(keyID2), 0644)
+
+	// Write plan secrets
+	assertWriteFile(t, repoDir+"/secret", []byte(secVal+"01"), 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", []byte(secVal+"02"), 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", []byte(secVal+"03"), 0644)
+
+	// set test dir as Home because git command will use default strongbox key
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestSimpleEnc\"")
+
+	// Make sure files are encrypted
+	ptOut01, _ := command(repoDir, "git", "show", "--", "secret")
+	encOut01, _ := command(repoDir, "git", "show", "HEAD:secret")
+	assert.Contains(t, string(ptOut01), secVal+"01", "should be in plain text")
+	assert.Contains(t, string(encOut01), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	ptOut02, _ := command(repoDir, "git", "show", "--", "secrets/s2")
+	encOut02, _ := command(repoDir, "git", "show", "HEAD:secrets/s2")
+	assert.Contains(t, string(ptOut02), secVal+"02", "should be in plain text")
+	assert.Contains(t, string(encOut02), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	ptOut03, _ := command(repoDir, "git", "show", "--", "app/secrets/s3")
+	encOut03, _ := command(repoDir, "git", "show", "HEAD:app/secrets/s3")
+	assert.Contains(t, string(ptOut03), secVal+"03", "should be in plain text")
+	assert.Contains(t, string(encOut03), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	// TEST 1 (using default keyring file location)
+	//override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	// run command from the root of the target folder without path arg
+	assertCommand(t, repoDir, "strongbox", "-decrypt", "-recursive")
+
+	// make sure all files are decrypted
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), secVal+"01", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), secVal+"02", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), secVal+"03", "should be in plain text")
+
+	// TEST 2 (using custom keyring file location)
+	// override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	keyRingPath := repoDir + "/.keyring"
+	// move keyring file
+	assertCommand(t, "/", "mv", HOME+"/.strongbox_keyring", keyRingPath)
+	// run command from outside of the target folder
+	assertCommand(t, "/", "strongbox", "-keyring", keyRingPath, "-decrypt", "-recursive", repoDir)
+
+	// make sure all files are decrypted
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), secVal+"01", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), secVal+"02", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), secVal+"03", "should be in plain text")
+
+	// TEST 3.1 (using given private key)
+	// override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	//since rec-dec-01 is not used to encrypt app folders secret so expect error
+	command(repoDir, "strongbox", "-key", pKey1, "-decrypt", "-recursive", ".")
+
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), secVal+"01", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), secVal+"02", "should be in plain text")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+
+	// TEST 3.2 (using custom keyring file location)
+	// override local file with encrypted content
+	assertWriteFile(t, repoDir+"/secret", encOut01, 0644)
+	assertWriteFile(t, repoDir+"/secrets/s2", encOut02, 0644)
+	assertWriteFile(t, repoDir+"/app/secrets/s3", encOut03, 0644)
+
+	//since rec-dec-02 is not used to encrypt root folders secrets so expect error
+	command(repoDir, "strongbox", "-key", pKey2, "-decrypt", "-recursive", ".")
+
+	assert.Contains(t, assertReadFile(t, repoDir+"/secret"), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+	assert.Contains(t, assertReadFile(t, repoDir+"/secrets/s2"), "STRONGBOX ENCRYPTED RESOURCE", "should be encrypted")
+	assert.Contains(t, assertReadFile(t, repoDir+"/app/secrets/s3"), secVal+"03", "should be in plain text")
 }
 
-func TestDeterministic(t *testing.T) {
-	assert := assert.New(t)
+func TestAgeEnc(t *testing.T) {
+	repoDir := HOME + "/test-proj"
+	secVal := "age_secret1"
 
-	var cleaned1 bytes.Buffer
-	clean(bytes.NewReader(plain), &cleaned1, "")
+	assertCommand(t, repoDir, "mkdir", "-p", "age/secrets")
 
-	var cleaned2 bytes.Buffer
-	clean(bytes.NewReader(plain), &cleaned2, "")
+	assertWriteFile(t, repoDir+"/age/.gitattributes", []byte(`secrets/* filter=strongbox diff=strongbox`), 0644)
 
-	assert.Equal(cleaned1.String(), cleaned2.String())
+	assertWriteFile(t, repoDir+"/.strongbox_recipient", recipients()[0][1], 0644)
+
+	assertWriteFile(t, repoDir+"/age/secrets/secret", []byte(secVal), 0644)
+
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestAgeEnc\"")
+
+	ptOut, _ := command(repoDir, "git", "show")
+	encOut, _ := command(repoDir, "git", "show", "HEAD:age/secrets/secret")
+
+	assert.Contains(t, string(ptOut), secVal, "no plaintext")
+	assert.Contains(t, string(encOut), "-----BEGIN AGE ENCRYPTED FILE-----", "missing age header")
 }
 
-func BenchmarkRoundTripPlain(b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		var cleaned bytes.Buffer
-		clean(bytes.NewReader(plain), &cleaned, "")
+func TestAgeKeyUpdate(t *testing.T) {
+	repoDir := HOME + "/test-proj"
 
-		var smudged bytes.Buffer
-		smudge(bytes.NewReader(cleaned.Bytes()), &smudged, "")
-	}
+	// update recipient
+	assertWriteFile(t, repoDir+"/.strongbox_recipient", recipients()[1][1], 0644)
+
+	assertCommand(t, repoDir, "touch", "age/secrets/secret")
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestAgeKeyUpdate\"")
+
+	encOut, _ := command(repoDir, "git", "show", "HEAD:age/secrets/secret")
+	encOutPrevCommit, _ := command(repoDir, "git", "show", "HEAD^1:age/secrets/secret")
+
+	assert.Contains(t, string(encOut), "-----BEGIN AGE ENCRYPTED FILE-----", "missing age header")
+	assert.NotEqual(t, string(encOut), string(encOutPrevCommit), "cipher text hasn't changed")
+}
+
+func TestAgeSimulateDeterministic(t *testing.T) {
+	repoDir := HOME + "/test-proj"
+
+	assertCommand(t, repoDir, "touch", "age/secrets/secret")
+
+	status, _ := command(repoDir, "git", "status")
+
+	assert.NotContains(t, string(status), "age/secrets/secret", "secret file showing up in diff")
 }

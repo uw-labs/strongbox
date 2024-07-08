@@ -1,0 +1,9 @@
+#!/bin/sh
+
+PATH=$PATH:$GOPATH/bin
+
+go get -t .
+go install
+
+go get -t ./
+go test -v -tags=integration ./

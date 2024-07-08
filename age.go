@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"filippo.io/age"
@@ -66,11 +67,14 @@ func ageFileToRecipient(filename string) ([]age.Recipient, error) {
 }
 
 func ageEncrypt(w io.Writer, r []age.Recipient, in []byte, f string) {
-	// if there's no difference between the decrypted version of the file at HEAD
-	// and the new contents, then we re-use the previous version to prevent
-	// unnecessary file updates
-	if agePlaintextEqual(in, f) {
-		fah := fileAtHEAD(f)
+	// We have to do check the following because age's encryption is non
+	// deterministic
+	//
+	// if there's no difference between the decrypted version of the file
+	// at HEAD and the new contents AND file's recipient hasn't changed, do
+	// not re-encrypt
+	if agePlaintextEqual(in, f) && !ageRecipientChanged(f) {
+		fah := ageFileAtHEAD(f)
 		if _, err := io.Copy(w, bytes.NewReader(fah)); err != nil {
 			log.Fatal(err)
 		}
@@ -126,7 +130,7 @@ func agePlaintextEqual(in []byte, f string) bool {
 		return false
 	}
 
-	fileAtHEAD := fileAtHEAD(f)
+	fileAtHEAD := ageFileAtHEAD(f)
 	if !strings.HasPrefix(string(fileAtHEAD), armor.Header) {
 		//log.Fatalf("Expect age header: filename=%s", f)
 		log.Printf("Expect age header: command=%v filename=%s blob=%s", command, f, string(fileAtHEAD))
@@ -136,7 +140,7 @@ func agePlaintextEqual(in []byte, f string) bool {
 	return bytes.Equal(plaintext.Bytes(), in)
 }
 
-func fileAtHEAD(f string) []byte {
+func ageFileAtHEAD(f string) []byte {
 	command := []string{"cat-file", "-p", fmt.Sprintf("HEAD:%s", f)}
 	cmd := exec.Command("git", command...)
 	fileAtHEAD, err := cmd.CombinedOutput()
@@ -144,4 +148,28 @@ func fileAtHEAD(f string) []byte {
 		log.Fatal(err)
 	}
 	return fileAtHEAD
+}
+
+func ageRecipientChanged(filename string) bool {
+	path := filepath.Dir(filename)
+	for {
+		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+			ageRecipientFilename := filepath.Join(path, recipientFilename)
+			// If we found `.strongbox_recipient` - compare it with HEAD version
+			if keyFile, err := os.Stat(ageRecipientFilename); err == nil && !keyFile.IsDir() {
+				fah := ageFileAtHEAD(ageRecipientFilename)
+				fod, err := os.ReadFile(ageRecipientFilename)
+				if err != nil {
+					log.Fatalf("Failed to open private keys file: %v", err)
+				}
+				return !bytes.Equal(fah, fod)
+			}
+		}
+		if path == "." {
+			break
+		}
+		path = filepath.Dir(path)
+	}
+
+	return false
 }
