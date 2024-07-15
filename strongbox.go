@@ -130,10 +130,6 @@ func main() {
 		usage()
 	}
 
-	if *flagIdentityFile != "" {
-		identityFilename = *flagIdentityFile
-	}
-
 	if *flagGenIdentity != "" {
 		ageGenIdentity(*flagGenIdentity)
 		return

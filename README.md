@@ -43,6 +43,9 @@ encryption. Age is the recommended option.
 | age        | .strongbox_identity     | .strongbox_recipient |
 | siv        | .strongbox-keyring      | .strongbox-keyid     |
 
+If both identity / key files are present in the same directory,
+`.strongbox_identity` (age) will be preferred.
+
 1. As a one time action, install the plugin by running `strongbox -git-config`.
    This will edit global Git config to enable Strongbox filter and diff
    configuration.
