@@ -295,15 +295,13 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 		if _, err := io.Copy(w, bytes.NewReader(out)); err != nil {
 			log.Println(err)
 		}
+		return
 	}
 
 	// file is a non-siv and non-age file, copy as is and exit
-	if !bytes.HasPrefix(in, prefix) && !strings.HasPrefix(string(in), armor.Header) {
-		_, err = io.Copy(w, bytes.NewReader(in))
-		if err != nil {
-			log.Fatal(err)
-		}
-		return
+	_, err = io.Copy(w, bytes.NewReader(in))
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -316,26 +314,18 @@ func findRecipients(filename string) ([]age.Recipient, []byte, error) {
 			// If we found `.strongbox_recipient` - parse it and return
 			if keyFile, err := os.Stat(ageRecipientFilename); err == nil && !keyFile.IsDir() {
 				recipients, err := ageFileToRecipient(ageRecipientFilename)
-				if err != nil {
-					return nil, nil, err
-				}
-				return recipients, nil, nil
+				return recipients, nil, err
 			}
 			// If we found `strongbox-keyid` - get the corresponding key and return it
 			keyFilename := filepath.Join(path, ".strongbox-keyid")
 			if keyFile, err := os.Stat(keyFilename); err == nil && !keyFile.IsDir() {
 				key, err := sivFileToKey(keyFilename)
-				if err != nil {
-					return nil, nil, err
-				}
-				return nil, key, nil
+				return nil, key, err
 			}
 		}
 		if path == "." {
-			break
+			return nil, nil, fmt.Errorf("failed to find recipient or keyid for file %s", filename)
 		}
 		path = filepath.Dir(path)
 	}
-
-	return nil, nil, fmt.Errorf("failed to find recipient or keyid for file %s", filename)
 }

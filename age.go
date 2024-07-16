@@ -128,8 +128,8 @@ func agePlaintextEqual(in []byte, f string) bool {
 
 	fileAtHEAD := ageFileAtHEAD(f)
 	if !strings.HasPrefix(string(fileAtHEAD), armor.Header) {
-		//log.Fatalf("Expect age header: filename=%s", f)
 		log.Printf("Expect age header: command=%v filename=%s blob=%s", command, f, string(fileAtHEAD))
+		return false
 	}
 	var plaintext bytes.Buffer
 	ageDecrypt(&plaintext, fileAtHEAD)
