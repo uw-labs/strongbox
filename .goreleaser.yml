@@ -15,7 +15,7 @@ builds:
       - arm64
     ignore:
       - goos: darwin
-        goarch: '386'
+        goarch: "386"
       - goos: freebsd
         goarch: arm64
 
@@ -36,7 +36,7 @@ brews:
     description: Encryption for git users
     homepage: https://github.com/uw-labs/strongbox
     license: LGPL-3.0
-    folder: Formula
-    tap:
+    directory: Formula
+    repository:
       owner: uw-labs
       name: homebrew-tap
