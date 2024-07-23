@@ -127,8 +127,8 @@ func agePlaintextEqual(in []byte, f string) bool {
 	}
 
 	fileAtHEAD := ageFileAtHEAD(f)
+	// potentially re-encrypting SIV file
 	if !strings.HasPrefix(string(fileAtHEAD), armor.Header) {
-		log.Printf("Expect age header: command=%v filename=%s blob=%s", command, f, string(fileAtHEAD))
 		return false
 	}
 	var plaintext bytes.Buffer
