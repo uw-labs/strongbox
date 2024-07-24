@@ -41,7 +41,7 @@ encryption. Age is the recommended option.
 | encryption | identity / keyring file | recipient / key file |
 | ---------- | ----------------------- | -------------------- |
 | age        | .strongbox_identity     | .strongbox_recipient |
-| siv        | .strongbox-keyring      | .strongbox-keyid     |
+| siv        | .strongbox_keyring      | .strongbox-keyid     |
 
 If both identity / key files are present in the same directory,
 `.strongbox_identity` (age) will be preferred.
