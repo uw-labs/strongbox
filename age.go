@@ -93,12 +93,16 @@ func ageDecrypt(w io.Writer, in []byte) {
 	defer identityFile.Close()
 	identities, err := age.ParseIdentities(identityFile)
 	if err != nil {
-		log.Fatalf("Failed to parse private key: %v", err)
+		// could not parse identity file, copy as is and return
+		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
+			log.Println(err)
+		}
+		return
 	}
 	armorReader := armor.NewReader(bytes.NewReader(in))
 	ar, err := age.Decrypt(armorReader, identities...)
 	if err != nil {
-		// Couldn't find the key, just copy as is and return
+		// couldn't find the key, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
 		}
