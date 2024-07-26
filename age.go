@@ -42,24 +42,12 @@ func ageGenIdentity(desc string) {
 }
 
 func ageFileToRecipient(filename string) ([]age.Recipient, error) {
-	var recipients []age.Recipient
-	publicKeys, err := os.ReadFile(filename)
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	lines := bytes.Split(publicKeys, []byte("\n"))
-	for _, line := range lines {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		recipient, err := age.ParseX25519Recipient(string(line))
-		if err != nil {
-			return nil, err
-		}
-		recipients = append(recipients, recipient)
-	}
-	return recipients, nil
+	defer file.Close()
+	return age.ParseRecipients(file)
 }
 
 func ageEncrypt(w io.Writer, r []age.Recipient, in []byte, f string) {
@@ -96,17 +84,25 @@ func ageEncrypt(w io.Writer, r []age.Recipient, in []byte, f string) {
 func ageDecrypt(w io.Writer, in []byte) {
 	identityFile, err := os.Open(*flagIdentityFile)
 	if err != nil {
-		log.Fatalf("Failed to open private keys file: %v", err)
+		// identity file doesn't exist, copy as is and return
+		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
+			log.Println(err)
+		}
+		return
 	}
 	defer identityFile.Close()
 	identities, err := age.ParseIdentities(identityFile)
 	if err != nil {
-		log.Fatalf("Failed to parse private key: %v", err)
+		// could not parse identity file, copy as is and return
+		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
+			log.Println(err)
+		}
+		return
 	}
 	armorReader := armor.NewReader(bytes.NewReader(in))
 	ar, err := age.Decrypt(armorReader, identities...)
 	if err != nil {
-		// Couldn't find the key, just copy as is and return
+		// couldn't find the key, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
 		}
