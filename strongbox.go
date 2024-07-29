@@ -42,14 +42,13 @@ var (
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -git-config\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring <keyring_file_path>] -gen-key key-name\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -gen-identity <identity name>\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -identity-file <path>\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring <keyring_file_path>] -decrypt -recursive <path>\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt -recursive -key <key> <path>\n")
-	fmt.Fprintf(os.Stderr, "\tstrongbox -decrypt -key <key>\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox [-identity-file PATH] -gen-identity IDENTITY_NAME\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring KEYRING_FILEPATH] -gen-key KEY_NAME\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring KEYRING_FILEPATH] -decrypt -recursive [-key KEY] [PATH]\n")
+	fmt.Fprintf(os.Stderr, "\tstrongbox [-keyring KEYRING_FILEPATH] -decrypt -key KEY [PATH]\n")
 	fmt.Fprintf(os.Stderr, "\tstrongbox -version\n")
-	fmt.Fprintf(os.Stderr, "\nif -keyring flag is not set default file '$HOME/.strongbox_keyring' or '$STRONGBOX_HOME/.strongbox_keyring' will be used as keyring\n")
+	fmt.Fprintf(os.Stderr, "\n(age) if -identity-file flag is not set, default '$HOME/.strongbox_identity' will be used\n")
+	fmt.Fprintf(os.Stderr, "(siv) if -keyring flag is not set default file '$HOME/.strongbox_keyring' or '$STRONGBOX_HOME/.strongbox_keyring' will be used as keyring\n")
 	os.Exit(2)
 }
 
