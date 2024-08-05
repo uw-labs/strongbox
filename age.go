@@ -19,6 +19,8 @@ const (
 	defaultIdentityFilename = ".strongbox_identity"
 )
 
+var identityFilename string
+
 func ageGenIdentity(desc string) {
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
@@ -27,7 +29,7 @@ func ageGenIdentity(desc string) {
 
 	fmt.Printf("public key: %s\n", identity.Recipient().String())
 
-	f, err := os.OpenFile(*flagIdentityFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(identityFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,7 +84,7 @@ func ageEncrypt(w io.Writer, r []age.Recipient, in []byte, f string) {
 }
 
 func ageDecrypt(w io.Writer, in []byte) {
-	identityFile, err := os.Open(*flagIdentityFile)
+	identityFile, err := os.Open(identityFilename)
 	if err != nil {
 		// identity file doesn't exist, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {

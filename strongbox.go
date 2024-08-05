@@ -27,7 +27,7 @@ var (
 	flagGenIdentity  = flag.String("gen-identity", "", "Generate a new identity and add it to your strongbox identity file")
 	flagGenKey       = flag.String("gen-key", "", "Generate a new key and add it to your strongbox keyring")
 	flagGitConfig    = flag.Bool("git-config", false, "Configure git for strongbox use")
-	flagIdentityFile = flag.String("identity-file", filepath.Join(os.Getenv("HOME"), defaultIdentityFilename), "strongbox identity file, if not set default '$HOME/.strongbox_identity' will be used")
+	flagIdentityFile = flag.String("identity-file", "", "strongbox identity file, if not set default '$HOME/.strongbox_identity' will be used")
 	flagKey          = flag.String("key", "", "Private key to use to decrypt")
 	flagKeyRing      = flag.String("keyring", "", "strongbox keyring file path, if not set default '$HOME/.strongbox_keyring' will be used")
 	flagRecursive    = flag.Bool("recursive", false, "Recursively decrypt all files under given folder, must be used with -decrypt flag")
@@ -77,6 +77,12 @@ func main() {
 	// Set up keyring file name
 	home := deriveHome()
 	kr = &fileKeyRing{fileName: filepath.Join(home, ".strongbox_keyring")}
+
+	if *flagIdentityFile != "" {
+		identityFilename = *flagIdentityFile
+	} else {
+		identityFilename = filepath.Join(home, defaultIdentityFilename)
+	}
 
 	// if keyring flag is set replace default keyRing
 	if *flagKeyRing != "" {
@@ -149,17 +155,16 @@ func deriveHome() string {
 	if home := os.Getenv("STRONGBOX_HOME"); home != "" {
 		return home
 	}
+	// try HOME env var
+	if home := os.Getenv("HOME"); home != "" {
+		return home
+	}
 	// Try user.Current which works in most cases, but may not work with CGO disabled.
 	u, err := user.Current()
 	if err == nil && u.HomeDir != "" {
 		return u.HomeDir
 	}
-	// try HOME env var
-	if home := os.Getenv("HOME"); home != "" {
-		return home
-	}
-
-	log.Fatal("Could not call os/user.Current() or find $STRONGBOX_HOME or $HOME. Please recompile with CGO enabled or set $STRONGBOX_HOME or $HOME")
+	log.Fatal("Could not find $STRONGBOX_HOME, $HOME or call os/user.Current(). Please set $STRONGBOX_HOME, $HOME or recompile with CGO enabled")
 	// not reached
 	return ""
 }
