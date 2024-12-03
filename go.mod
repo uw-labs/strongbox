@@ -1,4 +1,4 @@
-module github.com/uw-labs/strongbox
+module github.com/uw-labs/strongbox/v2
 
 go 1.21
 
