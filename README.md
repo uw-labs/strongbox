@@ -20,7 +20,7 @@ Alternatively, assuming you have a working [Go](https://golang.org) installation
 install via the following command:
 
 ```console
-$ go install github.com/uw-labs/strongbox@v1.1.0
+$ go install github.com/uw-labs/strongbox/v2@v2.0.0
 ```
 
 ### Homebrew
