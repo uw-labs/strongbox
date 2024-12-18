@@ -13,7 +13,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require filippo.io/age v1.2.0
+require filippo.io/age v1.2.1
 
 require (
 	github.com/davecgh/go-spew v1.1.0 // indirect
