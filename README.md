@@ -56,7 +56,7 @@ If both identity / key files are present in the same directory,
    For example:
 
    ```
-   secrets/* filter=strongbox diff=strongbox
+   secrets/* filter=strongbox diff=strongbox merge=strongbox
    ```
 
 3. Generate a key to use for the encryption, for example:

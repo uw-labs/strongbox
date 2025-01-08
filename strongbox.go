@@ -199,6 +199,29 @@ func gitConfig() {
 		{"config", "--global", "--replace-all", "filter.strongbox.required", "true"},
 
 		{"config", "--global", "--replace-all", "diff.strongbox.textconv", "strongbox -diff"},
+		{"config", "--global", "--replace-all", "merge.strongbox.driver", "$HOME/strongbox_merge_driver.sh %O %A %B %L %P %S %X %Y"},
+	}
+	mergeDriver := `#!/usr/bin/env bash
+set -o errexit -o pipefail -o nounset
+common_file="$(mktemp)"
+strongbox -smudge "$5" < "$1" > "$common_file"
+current_file="$(mktemp)"
+strongbox -smudge "$5" < "$2" > "$current_file"
+other_file="$(mktemp)"
+strongbox -smudge "$5" < "$3" > "$other_file"
+git merge-file \
+	--marker-size="$4" \
+	--stdout \
+	-L "$6" \
+	-L "$7" \
+	-L "$8" \
+	"$current_file" \
+	"$common_file" \
+	"$other_file" \
+	> "$5"
+`
+	if err := os.WriteFile(filepath.Join(os.Getenv("HOME"), "strongbox_merge_driver.sh"), []byte(mergeDriver), 0755); err != nil {
+		log.Fatalf("failed to write merge driver script %v", err)
 	}
 	for _, command := range args {
 		cmd := exec.Command("git", command...)
