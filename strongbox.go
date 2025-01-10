@@ -190,7 +190,7 @@ func decryptCLI() {
 		log.Fatalf("Unable to decrypt %v", err)
 	}
 	fmt.Printf("%s", out)
-}	
+}
 
 func gitConfig() {
 	args := [][]string{
