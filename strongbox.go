@@ -190,7 +190,7 @@ func decryptCLI() {
 		log.Fatalf("Unable to decrypt %v", err)
 	}
 	fmt.Printf("%s", out)
-}
+}	
 
 func gitConfig() {
 	args := [][]string{
@@ -220,7 +220,7 @@ git merge-file \
 	"$other_file" \
 	> "$5"
 `
-	if err := os.WriteFile(filepath.Join(os.Getenv("HOME"), "strongbox_merge_driver.sh"), []byte(mergeDriver), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(deriveHome(), "strongbox_merge_driver.sh"), []byte(mergeDriver), 0755); err != nil {
 		log.Fatalf("failed to write merge driver script %v", err)
 	}
 	for _, command := range args {
