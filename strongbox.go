@@ -16,11 +16,25 @@ import (
 	"filippo.io/age/armor"
 )
 
+// https://stackoverflow.com/a/28323276
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return strings.Join(*i, " ")
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
 	builtBy = "unknown"
+
+	mergeFileFlags arrayFlags
 
 	// flags
 	flagDecrypt      = flag.Bool("decrypt", false, "Decrypt single resource")
@@ -55,6 +69,8 @@ func usage() {
 func main() {
 	log.SetPrefix("strongbox: ")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	flag.Var(&mergeFileFlags, "merge-file", "intended to be called internally by git")
 
 	flag.Usage = usage
 	flag.Parse()
@@ -148,6 +164,12 @@ func main() {
 		smudge(os.Stdin, os.Stdout, *flagSmudge)
 		return
 	}
+	if len(mergeFileFlags) > 0 {
+		if len(mergeFileFlags) != 8 {
+			log.Fatalf("expected 8 -merge-file arguments, got %d: %v", len(mergeFileFlags), mergeFileFlags)
+		}
+		mergeFile()
+	}
 }
 
 func deriveHome() string {
@@ -199,29 +221,7 @@ func gitConfig() {
 		{"config", "--global", "--replace-all", "filter.strongbox.required", "true"},
 
 		{"config", "--global", "--replace-all", "diff.strongbox.textconv", "strongbox -diff"},
-		{"config", "--global", "--replace-all", "merge.strongbox.driver", "$HOME/strongbox_merge_driver.sh %O %A %B %L %P %S %X %Y"},
-	}
-	mergeDriver := `#!/usr/bin/env bash
-set -o errexit -o pipefail -o nounset
-common_file="$(mktemp)"
-strongbox -smudge "$5" < "$1" > "$common_file"
-current_file="$(mktemp)"
-strongbox -smudge "$5" < "$2" > "$current_file"
-other_file="$(mktemp)"
-strongbox -smudge "$5" < "$3" > "$other_file"
-git merge-file \
-	--marker-size="$4" \
-	--stdout \
-	-L "$6" \
-	-L "$7" \
-	-L "$8" \
-	"$current_file" \
-	"$common_file" \
-	"$other_file" \
-	> "$5"
-`
-	if err := os.WriteFile(filepath.Join(deriveHome(), "strongbox_merge_driver.sh"), []byte(mergeDriver), 0755); err != nil {
-		log.Fatalf("failed to write merge driver script %v", err)
+		{"config", "--global", "--replace-all", "merge.strongbox.driver", "strongbox -merge-file %O -merge-file %A -merge-file %B -merge-file %L -merge-file %P -merge-file %S -merge-file %X -merge-file %Y"},
 	}
 	for _, command := range args {
 		cmd := exec.Command("git", command...)
@@ -330,6 +330,104 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func mergeFile() {
+	base := mergeFileFlags[0]
+	current := mergeFileFlags[1]
+	other := mergeFileFlags[2]
+	markerSize := mergeFileFlags[3]
+	output := mergeFileFlags[4]
+	label1 := mergeFileFlags[5]
+	label2 := mergeFileFlags[6]
+	label3 := mergeFileFlags[7]
+
+	base, err := smudgeToFile(mergeFileFlags[0]) // Smudge base
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Remove(base)
+
+	current, err = smudgeToFile(mergeFileFlags[1]) // Smudge current
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Remove(current)
+
+	other, err = smudgeToFile(mergeFileFlags[2]) // Smudge other
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Remove(other)
+
+	// Run git merge-file
+	cmd := exec.Command("git", "merge-file",
+		"--marker-size="+markerSize,
+		"--stdout",
+		"-L", label1,
+		"-L", label2,
+		"-L", label3,
+		current,
+		base,
+		other)
+
+	merged, err := cmd.Output()
+	if err != nil {
+		log.Fatalf("git merge-file failed: %v", err)
+	}
+
+	// Write the output to the specified file
+	if err := os.WriteFile(current, merged, 0644); err != nil {
+		log.Fatalf("failed to write merged file: %v", err)
+	}
+
+	fmt.Printf("Merged file written to %s\n", output)
+}
+
+func smudgeFile(filename string) *strings.Builder {
+	// Open the file
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("failed to open file %s: %v", filename, err)
+	}
+	defer file.Close()
+
+	// Create a buffer to hold the processed output
+	var buf strings.Builder
+	smudge(file, &buf, filename)
+	return &buf
+}
+
+func smudgeToFile(filename string) (string, error) {
+	// Open the input file
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	// Create a buffer to hold the processed output
+	var buf strings.Builder
+	smudge(file, &buf, filename)
+
+	// Write the buffer content to a temporary file
+	return createTempFile(buf.String()), nil
+}
+
+func createTempFile(content string) string {
+	// Create a temporary file
+	tmpFile, err := os.CreateTemp("", "merge-file-*.tmp")
+	if err != nil {
+		log.Fatalf("failed to create temporary file: %v", err)
+	}
+	defer tmpFile.Close()
+
+	// Write the content to the file
+	if _, err := tmpFile.WriteString(content); err != nil {
+		log.Fatalf("failed to write to temporary file: %v", err)
+	}
+
+	return tmpFile.Name() // Return the file path
 }
 
 // Finds closest age recipient or siv keyid
