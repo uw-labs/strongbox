@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -333,32 +334,41 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 }
 
 func mergeFile() {
-	base := mergeFileFlags[0]
-	current := mergeFileFlags[1]
-	other := mergeFileFlags[2]
-	markerSize := mergeFileFlags[3]
-	output := mergeFileFlags[4]
-	label1 := mergeFileFlags[5]
-	label2 := mergeFileFlags[6]
-	label3 := mergeFileFlags[7]
+	// The merge driver is expected to leave the result of the merge in the file
+	// named with %A by overwriting it, and exit with zero status if it managed to
+	// merge them cleanly, or non-zero if there were conflicts. When the driver
+	// crashes it is expected to exit with non-zero status that are higher than 128,
+	// and in such a case, the merge results in a failure (which is different
+	// from producing a conflict). hence os.Exit(-1) is used here on failure
+	base := mergeFileFlags[0]       // %O
+	current := mergeFileFlags[1]    // %A
+	other := mergeFileFlags[2]      // %B
+	markerSize := mergeFileFlags[3] // %L
+	_ = mergeFileFlags[4]           // %P
+	label1 := mergeFileFlags[5]     // %S
+	label2 := mergeFileFlags[6]     // %X
+	label3 := mergeFileFlags[7]     // %Y
 
-	base, err := smudgeToFile(mergeFileFlags[0]) // Smudge base
+	tempBase, err := smudgeToFile(base) // Smudge base
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%s", err)
+		os.Exit(-1)
 	}
-	defer os.Remove(base)
+	defer os.Remove(tempBase)
 
-	current, err = smudgeToFile(mergeFileFlags[1]) // Smudge current
+	tempCurrent, err := smudgeToFile(current) // Smudge current
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%s", err)
+		os.Exit(-1)
 	}
-	defer os.Remove(current)
+	defer os.Remove(tempCurrent)
 
-	other, err = smudgeToFile(mergeFileFlags[2]) // Smudge other
+	tempOther, err := smudgeToFile(other) // Smudge other
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%s", err)
+		os.Exit(-1)
 	}
-	defer os.Remove(other)
+	defer os.Remove(tempOther)
 
 	// Run git merge-file
 	cmd := exec.Command("git", "merge-file",
@@ -367,35 +377,32 @@ func mergeFile() {
 		"-L", label1,
 		"-L", label2,
 		"-L", label3,
-		current,
-		base,
-		other)
+		tempCurrent,
+		tempBase,
+		tempOther)
 
-	merged, err := cmd.Output()
-	if err != nil {
-		log.Fatalf("git merge-file failed: %v", err)
-	}
-
-	// Write the output to the specified file
+	// The exit value of `git merge-file` is negative on error, and the number of
+	// conflicts otherwise (truncated to 127 if there are more than that many conflicts).
+	// If the merge was clean, the exit value is 0.
+	merged, mergeErr := cmd.Output()
+	// write merged value regardless of error
 	if err := os.WriteFile(current, merged, 0644); err != nil {
-		log.Fatalf("failed to write merged file: %v", err)
+		log.Printf("failed to write merged file: %s", err)
+		os.Exit(-1)
 	}
+	fmt.Printf("Merged file written to %s\n", current)
 
-	fmt.Printf("Merged file written to %s\n", output)
-}
+	// match exit code of `git merge-file` command
+	if mergeErr != nil {
+		var execError *exec.ExitError
 
-func smudgeFile(filename string) *strings.Builder {
-	// Open the file
-	file, err := os.Open(filename)
-	if err != nil {
-		log.Fatalf("failed to open file %s: %v", filename, err)
+		if errors.As(mergeErr, &execError) {
+			os.Exit(execError.ExitCode())
+		}
+
+		log.Printf("git merge-file failed: %v", mergeErr)
+		os.Exit(-1)
 	}
-	defer file.Close()
-
-	// Create a buffer to hold the processed output
-	var buf strings.Builder
-	smudge(file, &buf, filename)
-	return &buf
 }
 
 func smudgeToFile(filename string) (string, error) {
