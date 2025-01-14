@@ -334,6 +334,8 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 }
 
 func mergeFile() {
+	// https://git-scm.com/docs/gitattributes#_defining_a_custom_merge_driver
+	//
 	// The merge driver is expected to leave the result of the merge in the file
 	// named with %A by overwriting it, and exit with zero status if it managed to
 	// merge them cleanly, or non-zero if there were conflicts. When the driver
