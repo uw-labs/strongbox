@@ -21,6 +21,7 @@ var (
 )
 
 func command(dir, name string, arg ...string) (out []byte, err error) {
+	fmt.Printf("[%s]> %s %s\n", dir, name, strings.Join(arg, " "))
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = dir
 	out, err = cmd.CombinedOutput()
@@ -29,6 +30,7 @@ func command(dir, name string, arg ...string) (out []byte, err error) {
 }
 
 func assertCommand(t *testing.T, dir, name string, arg ...string) (out []byte) {
+	fmt.Printf("[%s]> %s %s\n", dir, name, strings.Join(arg, " "))
 	out, err := command(dir, name, arg...)
 	if err != nil {
 		t.Fatal(string(out))
@@ -80,6 +82,24 @@ func recipients() [][][]byte {
 	return r.FindAllSubmatch(f, -1)
 }
 
+func setupRepo(repoDir string) {
+	out, err := command("/", "mkdir", repoDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command(repoDir, "git", "config", "--global", "init.defaultBranch", defaultBranch)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command(repoDir, "git", "init")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+}
+
 func TestMain(m *testing.M) {
 	out, err := command("/", "git", "config", "--global", "user.email", "you@example.com")
 	if err != nil {
@@ -111,109 +131,85 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "%v", string(out))
 		os.Exit(1)
 	}
-	out, err = command("/", "mkdir", defaultRepoDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", string(out))
-		os.Exit(1)
-	}
-	out, err = command(defaultRepoDir, "git", "config", "--global", "init.defaultBranch", defaultBranch)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", string(out))
-		os.Exit(1)
-	}
-	out, err = command(defaultRepoDir, "git", "init")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", string(out))
-		os.Exit(1)
-	}
+
+	setupRepo(defaultRepoDir)
+
 	os.Exit(m.Run())
 }
 
 func TestMergeDriverMerge(t *testing.T) {
-	repoDir := defaultRepoDir
+	testMergeDriver(t, "merge")
+}
+
+func TestMergeDriverRebase(t *testing.T) {
+	testMergeDriver(t, "rebase")
+}
+
+func testMergeDriver(t *testing.T, mergeOrRebase string) {
+	repoDir := HOME + "/test-merge-driver-" + mergeOrRebase + "/"
 	secDir := "secrets/dir0/"
 	secFileName := "sec0"
 	secFilePath := secDir + secFileName
 	secVal := "secret123wallaby"
 	_, keyID := keysFromKR(t, "test00")
 	ga := "secrets/* filter=strongbox diff=strongbox merge=strongbox"
+	branch1 := "branch-1"
+	branch2 := "branch-2"
+
+	setupRepo(repoDir)
 
 	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
 	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID), 0644)
 	assertCommand(t, repoDir, "mkdir", "-p", secDir)
+	assertCommand(t, repoDir, "ls", "-a", "-l")
+
 	assertWriteFile(t, repoDir+secFilePath, []byte(secVal), 0644)
 	assertCommand(t, repoDir, "git", "add", ".")
-	assertCommand(t, repoDir, "git", "commit", "-m", "\"TestMergeDriverMerge\"")
+	assertCommand(t, repoDir, "git", "commit", "-m", "first commit")
 
-	branches := []string{"temp1", "temp2"}
-	for i, branch := range branches {
-		if i != 0 {
-			assertCommand(t, repoDir, "git", "checkout", defaultBranch)
-		}
-		assertCommand(t, repoDir, "git", "checkout", "-b", branch)
-		assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch), 0644)
-		assertCommand(t, repoDir, "git", "add", ".")
-		assertCommand(t, repoDir, "git", "commit", "-m", "\"TestMergeDiff "+branch+"\"")
-		if i == len(branches)-1 {
-			command(repoDir, "git", "merge", "temp1")
-		}
-	}
-
-	out, _ := command(repoDir, "cat", secFilePath)
-	assert.NotContains(t, string(out), "STRONGBOX ENCRYPTED RESOURCE")
-	assert.Contains(t, string(out), "<<<<<<< HEAD\n"+secVal+branches[1]+"\n=======\n"+secVal+branches[0]+"\n>>>>>>> "+branches[0]+"\n")
-	command(repoDir, "git", "merge", "--abort")
-	command(repoDir, "git", "checkout", defaultBranch)
-	for _, branch := range branches {
-		command(repoDir, "git", "branch", "-D", branch)
-	}
-}
-
-func TestMergeDriverRebase(t *testing.T) {
-	repoDir := defaultRepoDir
-	secDir := "secrets/dir0/"
-	secFileName := "sec0"
-	secFilePath := secDir + secFileName
-	secVal := "secret123raccoon"
-	commitMsg := "TestMergeDriverRebase"
-	_, keyID := keysFromKR(t, "test00")
-	ga := "secrets/* filter=strongbox diff=strongbox merge=strongbox"
-
-	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
-	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID), 0644)
-	assertCommand(t, repoDir, "mkdir", "-p", secDir)
-	assertWriteFile(t, repoDir+secFilePath, []byte(secVal), 0644)
+	// create branch-1 and update secret file
+	assertCommand(t, repoDir, "git", "checkout", "-b", branch1)
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch1), 0644)
 	assertCommand(t, repoDir, "git", "add", ".")
-	assertCommand(t, repoDir, "git", "commit", "-m", "\""+commitMsg+"\"")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
 
-	commitHash := ""
-	branches := []string{"temp1", "temp2"}
-	for i, branch := range branches {
-		branchCommitMsg := commitMsg + " " + branch
-		if i != 0 {
-			assertCommand(t, repoDir, "git", "checkout", defaultBranch)
-		}
-		assertCommand(t, repoDir, "git", "checkout", "-b", branch)
-		assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch), 0644)
-		assertCommand(t, repoDir, "git", "add", ".")
-		assertCommand(t, repoDir, "git", "commit", "-m", "\""+branchCommitMsg+"\"")
-		if i == len(branches)-1 {
-			assertCommand(t, repoDir, "git", "checkout", branches[i-1])
-			commitHashBytes := assertCommand(t, repoDir, "git", "rev-parse", "--short", "HEAD")
-			commitHash = strings.TrimSuffix(string(commitHashBytes), "\n")
-			fmt.Println(commitHash)
-			command(repoDir, "git", "rebase", branch)
-		}
-	}
+	assertCommand(t, repoDir, "git", "checkout", defaultBranch)
+
+	// test 1: merge/rebase with conflict
+	// create branch-2 and update secret file
+	assertCommand(t, repoDir, "git", "checkout", "-b", branch2)
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch2), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	// while on branch2 try merge/rebase branch1
+	command(repoDir, "git", mergeOrRebase, branch1)
 
 	out, _ := command(repoDir, "cat", secFilePath)
-	assert.NotContains(t, string(out), "STRONGBOX ENCRYPTED RESOURCE")
-	assert.Contains(t, string(out), "<<<<<<< HEAD\n"+secVal+branches[1]+"\n=======\n"+secVal+branches[0]+"\n>>>>>>> "+commitHash+" (\""+commitMsg+" "+branches[0]+"\")"+"\n")
-	command(repoDir, "git", "rebase", "--abort")
-	command(repoDir, "git", "checkout", defaultBranch)
-	for _, branch := range branches {
-		command(repoDir, "git", "branch", "-D", branch)
+	if mergeOrRebase == "merge" {
+		assert.Equal(t, string(out), "<<<<<<< HEAD\n"+secVal+branch2+"\n=======\n"+secVal+branch1+"\n>>>>>>> "+branch1+"\n")
+	} else {
+		assert.Contains(t, string(out), "<<<<<<< HEAD\n"+secVal+branch1+"\n=======\n"+secVal+branch2+"\n>>>>>>> ")
 	}
+	command(repoDir, "git", mergeOrRebase, "--abort")
+
+	// test 2: merge/rebase without conflict
+	command(repoDir, "git", "checkout", defaultBranch)
+	command(repoDir, "git", "branch", "-D", branch2)
+	// update secret same as branch1 to avoid conflict
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch1), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	assertCommand(t, repoDir, "git", "checkout", "-b", branch2)
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch1+"\n"+secVal+branch2), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	// while on branch2 try merge/rebase branch1
+	command(repoDir, "git", mergeOrRebase, branch1)
+	out, _ = command(repoDir, "cat", secFilePath)
+	assert.Equal(t, string(out), secVal+branch1+"\n"+secVal+branch2)
 }
 
 func TestSimpleEnc(t *testing.T) {
