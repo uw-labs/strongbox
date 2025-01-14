@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	HOME           = os.Getenv("HOME")
-	defaultRepoDir = HOME + "/test-proj/"
+	HOME           = deriveHome()
+	defaultRepoDir = "/tmp/test-proj/"
 	defaultBranch  = "main"
 )
 
