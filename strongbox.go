@@ -169,7 +169,7 @@ func main() {
 		if len(mergeFileFlags) != 8 {
 			log.Fatalf("expected 8 -merge-file arguments, got %d: %v", len(mergeFileFlags), mergeFileFlags)
 		}
-		mergeFile()
+		os.Exit(mergeFile())
 	}
 }
 
@@ -333,7 +333,7 @@ func smudge(r io.Reader, w io.Writer, filename string) {
 	}
 }
 
-func mergeFile() {
+func mergeFile() int {
 	// https://git-scm.com/docs/gitattributes#_defining_a_custom_merge_driver
 	//
 	// The merge driver is expected to leave the result of the merge in the file
@@ -341,7 +341,7 @@ func mergeFile() {
 	// merge them cleanly, or non-zero if there were conflicts. When the driver
 	// crashes it is expected to exit with non-zero status that are higher than 128,
 	// and in such a case, the merge results in a failure (which is different
-	// from producing a conflict). hence os.Exit(-1) is used here on failure
+	// from producing a conflict). hence exit code -1 is used here on failure
 	base := mergeFileFlags[0]       // %O
 	current := mergeFileFlags[1]    // %A
 	other := mergeFileFlags[2]      // %B
@@ -354,21 +354,21 @@ func mergeFile() {
 	tempBase, err := smudgeToFile(base) // Smudge base
 	if err != nil {
 		log.Printf("%s", err)
-		os.Exit(-1)
+		return -1
 	}
 	defer os.Remove(tempBase)
 
 	tempCurrent, err := smudgeToFile(current) // Smudge current
 	if err != nil {
 		log.Printf("%s", err)
-		os.Exit(-1)
+		return -1
 	}
 	defer os.Remove(tempCurrent)
 
 	tempOther, err := smudgeToFile(other) // Smudge other
 	if err != nil {
 		log.Printf("%s", err)
-		os.Exit(-1)
+		return -1
 	}
 	defer os.Remove(tempOther)
 
@@ -396,7 +396,7 @@ func mergeFile() {
 	if stdOut.Len() > 0 {
 		if err := os.WriteFile(current, stdOut.Bytes(), 0644); err != nil {
 			log.Printf("failed to write merged file: %s", err)
-			os.Exit(-1)
+			return -1
 		}
 	}
 
@@ -405,11 +405,12 @@ func mergeFile() {
 		var execError *exec.ExitError
 		if errors.As(mergeErr, &execError) {
 			fmt.Println(errOut.String())
-			os.Exit(execError.ExitCode())
+			return execError.ExitCode()
 		}
 		log.Printf("git merge-file failed: %s  %s", errOut.String(), mergeErr)
-		os.Exit(-1)
+		return -1
 	}
+	return 0
 }
 
 func smudgeToFile(filename string) (string, error) {
