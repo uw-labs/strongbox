@@ -372,6 +372,8 @@ func mergeFile() {
 	}
 	defer os.Remove(tempOther)
 
+	var stdOut bytes.Buffer
+	var errOut bytes.Buffer
 	// Run git merge-file
 	cmd := exec.Command("git", "merge-file",
 		"--marker-size="+markerSize,
@@ -382,27 +384,30 @@ func mergeFile() {
 		tempCurrent,
 		tempBase,
 		tempOther)
+	cmd.Stdout = &stdOut
+	cmd.Stderr = &errOut
 
 	// The exit value of `git merge-file` is negative on error, and the number of
 	// conflicts otherwise (truncated to 127 if there are more than that many conflicts).
 	// If the merge was clean, the exit value is 0.
-	merged, mergeErr := cmd.Output()
-	// write merged value regardless of error
-	if err := os.WriteFile(current, merged, 0644); err != nil {
-		log.Printf("failed to write merged file: %s", err)
-		os.Exit(-1)
+	mergeErr := cmd.Run()
+
+	// write merged value if produced
+	if stdOut.Len() > 0 {
+		if err := os.WriteFile(current, stdOut.Bytes(), 0644); err != nil {
+			log.Printf("failed to write merged file: %s", err)
+			os.Exit(-1)
+		}
 	}
-	fmt.Printf("Merged file written to %s\n", current)
 
 	// match exit code of `git merge-file` command
 	if mergeErr != nil {
 		var execError *exec.ExitError
-
 		if errors.As(mergeErr, &execError) {
+			fmt.Println(errOut.String())
 			os.Exit(execError.ExitCode())
 		}
-
-		log.Printf("git merge-file failed: %v", mergeErr)
+		log.Printf("git merge-file failed: %s  %s", errOut.String(), mergeErr)
 		os.Exit(-1)
 	}
 }
