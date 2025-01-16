@@ -12,6 +12,7 @@ import (
 )
 
 const _STRONGBOX_TEST_BINARY = "strongbox-test-bin"
+
 var binaryBuilt = false
 
 func ensureStrongboxBuilt(t *testing.T) {
@@ -56,6 +57,8 @@ func runCmd(name string, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
+var gitConfigured = false
+
 func configureGit(t *testing.T, repoDir string) {
 	t.Helper()
 	cwd, err := os.Getwd()
@@ -63,55 +66,57 @@ func configureGit(t *testing.T, repoDir string) {
 
 	// pass a rooted path (and not just ./file) so we can run it from worktrees
 	testBinPath := filepath.Join(cwd, _STRONGBOX_TEST_BINARY)
+	gitConfigPath := filepath.Join(cwd, "testdata", "git-test-config")
 
 	// avoid reading any configuration files outside this repo
 	// https://git-scm.com/docs/git#Documentation/git.txt-codeGITCONFIGGLOBALcode
-	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
 
-	// tell git to use the config file in the worktree
-	// https://git-scm.com/docs/git-worktree#_configuration_file
-	mustRunGitCmd(t, ".", "config", "set", "--local", "extensions.worktreeConfig", "true")
-	// config is bare, so we need some basic things set
-	mustRunGitCmd(t, repoDir, "config", "set", "--worktree", "user.name", "strongbox-tester")
-	mustRunGitCmd(
-		t,
-		repoDir,
-		"config",
-		"set",
-		"--worktree",
-		"user.email",
-		"strongbox-tester@example.com",
-	)
+	if !gitConfigured {
+		// we only read from the single config file, so set some identity
+		// information
+		mustRunGitCmd(t, repoDir, "config", "set", "--global", "user.name", "strongbox-tester")
+		mustRunGitCmd(
+			t,
+			repoDir,
+			"config",
+			"set",
+			"--global",
+			"user.email",
+			"strongbox-tester@example.com",
+		)
 
-	// setup strongbox
-	mustRunGitCmd(
-		t,
-		repoDir,
-		"config",
-		"set",
-		"--worktree",
-		"filter.strongbox.clean",
-		testBinPath+" -clean %f",
-	)
-	mustRunGitCmd(
-		t,
-		repoDir,
-		"config",
-		"set",
-		"--worktree",
-		"filter.strongbox.smudge",
-		testBinPath+" -smudge %f",
-	)
-	mustRunGitCmd(t, repoDir, "config", "set", "--worktree", "filter.strongbox.required", "true")
-	mustRunGitCmd(
-		t,
-		repoDir,
-		"config",
-		"set",
-		"--worktree",
-		"diff.strongbox.textconv",
-		testBinPath+" -diff",
-	)
+		// setup strongbox
+		mustRunGitCmd(
+			t,
+			repoDir,
+			"config",
+			"set",
+			"--global",
+			"filter.strongbox.clean",
+			testBinPath+" -clean %f",
+		)
+		mustRunGitCmd(
+			t,
+			repoDir,
+			"config",
+			"set",
+			"--global",
+			"filter.strongbox.smudge",
+			testBinPath+" -smudge %f",
+		)
+		mustRunGitCmd(t, repoDir, "config", "set", "--global", "filter.strongbox.required", "true")
+		mustRunGitCmd(
+			t,
+			repoDir,
+			"config",
+			"set",
+			"--global",
+			"diff.strongbox.textconv",
+			testBinPath+" -diff",
+		)
+		gitConfigured = true
+	}
 }
 
 func configureStrongbox(t *testing.T, repoDir string) {
