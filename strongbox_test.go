@@ -7,18 +7,21 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"testing"
 
-	yaml "gopkg.in/yaml.v2"
-
 	"github.com/stretchr/testify/assert"
+	yaml "gopkg.in/yaml.v2"
 )
 
 var (
-	HOME = os.Getenv("HOME")
+	HOME           = deriveHome()
+	defaultRepoDir = "/tmp/test-proj/"
+	defaultBranch  = "main"
 )
 
 func command(dir, name string, arg ...string) (out []byte, err error) {
+	fmt.Printf("[%s]> %s %s\n", dir, name, strings.Join(arg, " "))
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = dir
 	out, err = cmd.CombinedOutput()
@@ -27,6 +30,7 @@ func command(dir, name string, arg ...string) (out []byte, err error) {
 }
 
 func assertCommand(t *testing.T, dir, name string, arg ...string) (out []byte) {
+	fmt.Printf("[%s]> %s %s\n", dir, name, strings.Join(arg, " "))
 	out, err := command(dir, name, arg...)
 	if err != nil {
 		t.Fatal(string(out))
@@ -78,6 +82,24 @@ func recipients() [][][]byte {
 	return r.FindAllSubmatch(f, -1)
 }
 
+func setupRepo(repoDir string) {
+	out, err := command("/", "mkdir", repoDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command(repoDir, "git", "config", "--global", "init.defaultBranch", defaultBranch)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+	out, err = command(repoDir, "git", "init")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", string(out))
+		os.Exit(1)
+	}
+}
+
 func TestMain(m *testing.M) {
 	out, err := command("/", "git", "config", "--global", "user.email", "you@example.com")
 	if err != nil {
@@ -109,21 +131,89 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "%v", string(out))
 		os.Exit(1)
 	}
-	out, err = command("/", "mkdir", HOME+"/test-proj")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", string(out))
-		os.Exit(1)
-	}
-	out, err = command(HOME+"/test-proj", "git", "init")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", string(out))
-		os.Exit(1)
-	}
+
+	setupRepo(defaultRepoDir)
+
 	os.Exit(m.Run())
 }
 
+func TestMergeDriverMerge(t *testing.T) {
+	testMergeDriver(t, "merge")
+}
+
+func TestMergeDriverRebase(t *testing.T) {
+	testMergeDriver(t, "rebase")
+}
+
+func testMergeDriver(t *testing.T, mergeOrRebase string) {
+	repoDir := HOME + "/test-merge-driver-" + mergeOrRebase + "/"
+	secDir := "secrets/dir0/"
+	secFileName := "sec0"
+	secFilePath := secDir + secFileName
+	secVal := "secret123wallaby"
+	_, keyID := keysFromKR(t, "test00")
+	ga := "secrets/* filter=strongbox diff=strongbox merge=strongbox"
+	branch1 := "branch-1"
+	branch2 := "branch-2"
+
+	setupRepo(repoDir)
+
+	assertWriteFile(t, repoDir+"/.gitattributes", []byte(ga), 0644)
+	assertWriteFile(t, repoDir+"/.strongbox-keyid", []byte(keyID), 0644)
+	assertCommand(t, repoDir, "mkdir", "-p", secDir)
+	assertCommand(t, repoDir, "ls", "-a", "-l")
+
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "first commit")
+
+	// create branch-1 and update secret file
+	assertCommand(t, repoDir, "git", "checkout", "-b", branch1)
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch1), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	assertCommand(t, repoDir, "git", "checkout", defaultBranch)
+
+	// test 1: merge/rebase with conflict
+	// create branch-2 and update secret file
+	assertCommand(t, repoDir, "git", "checkout", "-b", branch2)
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch2), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	// while on branch2 try merge/rebase branch1
+	command(repoDir, "git", mergeOrRebase, branch1)
+
+	out, _ := command(repoDir, "cat", secFilePath)
+	if mergeOrRebase == "merge" {
+		assert.Equal(t, string(out), "<<<<<<< HEAD\n"+secVal+branch2+"\n=======\n"+secVal+branch1+"\n>>>>>>> "+branch1+"\n")
+	} else {
+		assert.Contains(t, string(out), "<<<<<<< HEAD\n"+secVal+branch1+"\n=======\n"+secVal+branch2+"\n>>>>>>> ")
+	}
+	command(repoDir, "git", mergeOrRebase, "--abort")
+
+	// test 2: merge/rebase without conflict
+	command(repoDir, "git", "checkout", defaultBranch)
+	command(repoDir, "git", "branch", "-D", branch2)
+	// update secret same as branch1 to avoid conflict
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch1), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	assertCommand(t, repoDir, "git", "checkout", "-b", branch2)
+	assertWriteFile(t, repoDir+secFilePath, []byte(secVal+branch1+"\n"+secVal+branch2), 0644)
+	assertCommand(t, repoDir, "git", "add", ".")
+	assertCommand(t, repoDir, "git", "commit", "-m", "updated secret")
+
+	// while on branch2 try merge/rebase branch1
+	command(repoDir, "git", mergeOrRebase, branch1)
+	out, _ = command(repoDir, "cat", secFilePath)
+	assert.Equal(t, string(out), secVal+branch1+"\n"+secVal+branch2)
+}
+
 func TestSimpleEnc(t *testing.T) {
-	repoDir := HOME + "/test-proj"
+	repoDir := defaultRepoDir
 	_, keyID := keysFromKR(t, "test00")
 	secVal := "secret123wombat"
 
@@ -142,7 +232,7 @@ secrets/* filter=strongbox diff=strongbox`
 }
 
 func TestNestedEnc(t *testing.T) {
-	repoDir := HOME + "/test-proj"
+	repoDir := defaultRepoDir
 	secVal := "secret123croc"
 
 	assertCommand(t, repoDir, "mkdir", "-p", "secrets/dir0")
@@ -159,7 +249,7 @@ func TestNestedEnc(t *testing.T) {
 }
 
 func TestMissingKey(t *testing.T) {
-	repoDir := HOME + "/test-proj"
+	repoDir := defaultRepoDir
 	secVal := "secret-missing-key"
 
 	// remove the key for encryption
@@ -291,7 +381,7 @@ secrets/* filter=strongbox diff=strongbox
 }
 
 func TestAgeEnc(t *testing.T) {
-	repoDir := HOME + "/test-proj"
+	repoDir := defaultRepoDir
 	secVal := "age_secret1"
 
 	assertCommand(t, repoDir, "mkdir", "-p", "age/secrets")
@@ -313,7 +403,7 @@ func TestAgeEnc(t *testing.T) {
 }
 
 func TestAgeKeyUpdate(t *testing.T) {
-	repoDir := HOME + "/test-proj"
+	repoDir := defaultRepoDir
 
 	// update recipient
 	assertWriteFile(t, repoDir+"/.strongbox_recipient", recipients()[1][1], 0644)
@@ -330,7 +420,7 @@ func TestAgeKeyUpdate(t *testing.T) {
 }
 
 func TestAgeSimulateDeterministic(t *testing.T) {
-	repoDir := HOME + "/test-proj"
+	repoDir := defaultRepoDir
 
 	assertCommand(t, repoDir, "touch", "age/secrets/secret")
 
