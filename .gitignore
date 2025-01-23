@@ -1,1 +1,3 @@
 strongbox
+# strongbox binary built for integration tests
+/strongbox-test-bin
