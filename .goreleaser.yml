@@ -1,4 +1,4 @@
-# Build customization
+version: 2
 builds:
   - id: main
     env:
@@ -21,9 +21,9 @@ release:
     name: strongbox
 
 archives:
-  - builds:
+  - ids:
       - main
-    format: binary
+    formats: ["binary"]
     files:
       - none*
 
