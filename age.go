@@ -95,6 +95,7 @@ func ageDecrypt(w io.Writer, in []byte) {
 	defer identityFile.Close()
 	identities, err := age.ParseIdentities(identityFile)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse identity file: %v\n", err)
 		// could not parse identity file, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
