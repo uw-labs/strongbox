@@ -66,8 +66,11 @@ If both identity / key files are present in the same directory,
    This will generate a new [age](https://github.com/FiloSottile/age) keypair
    and place it in `~/.strongbox_identity`. You can specify alternative
    location using `-identity-file` flag or setting `$HOME` envvar.
-
-4. Include `.strongbox_recipient` file in your repository
+   The generated public key is printed when the command completes:
+   ```console
+   public key: agexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+4. Add this public key in the file `.strongbox_recipient` in your repository
    (https://github.com/FiloSottile/age?tab=readme-ov-file#recipient-files).
    This can be in the same directory as the protected resource(s) or any parent
    directory. When searching for `.strongbox_recipient` for a given resource,
@@ -75,7 +78,7 @@ If both identity / key files are present in the same directory,
    This allows using different keys for different subdirectories within a
    repository.
 
-5. If Strongbox identity file is stored in different location `-identity-file`
+5. If the Strongbox identity file is stored in a different location `-identity-file`
    can be used. ie `strongbox [-identity-file <identity_file_path>]
    -gen-identity key-name`
 
