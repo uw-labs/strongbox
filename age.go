@@ -106,7 +106,6 @@ func ageDecrypt(w io.Writer, in []byte) {
 	armorReader := armor.NewReader(bytes.NewReader(in))
 	ar, err := age.Decrypt(armorReader, identities...)
 	if err != nil {
-		log.Println("failed to decrypt:", err)
 		// couldn't find the key, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
