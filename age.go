@@ -86,6 +86,7 @@ func ageEncrypt(w io.Writer, r []age.Recipient, in []byte, f string) {
 func ageDecrypt(w io.Writer, in []byte) {
 	identityFile, err := os.Open(identityFilename)
 	if err != nil {
+		log.Println("failed to open identity file:", err)
 		// identity file doesn't exist, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
@@ -95,6 +96,7 @@ func ageDecrypt(w io.Writer, in []byte) {
 	defer identityFile.Close()
 	identities, err := age.ParseIdentities(identityFile)
 	if err != nil {
+		log.Println("failed to parse identity file:", err)
 		// could not parse identity file, copy as is and return
 		if _, err = io.Copy(w, bytes.NewReader(in)); err != nil {
 			log.Println(err)
