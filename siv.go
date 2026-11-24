@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/jacobsa/crypto/siv"
+	vgzip "github.com/uw-labs/strongbox/v2/internal/gzip"
 )
 
 var (
@@ -176,9 +177,12 @@ func decrypt(enc []byte, priv []byte) ([]byte, error) {
 	return decrypted, nil
 }
 
+// compress must keep producing the bytes Go 1.26 produced: they are inside every
+// committed blob, so a different compressor makes every edit look like a
+// ciphertext change. That is why the writer is vendored, not stdlib.
 func compress(b []byte) []byte {
 	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
+	zw := vgzip.NewWriter(&buf)
 	_, err := zw.Write(b)
 	if err != nil {
 		log.Fatal(err)

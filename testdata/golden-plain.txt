@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: golden
+type: Opaque
+stringData:
+  username: strongbox
+  password: correct-horse-battery-staple-0123456789
+  token: Zm9vYmFyYmF6cXV4MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6
